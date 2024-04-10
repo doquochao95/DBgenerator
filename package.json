@@ -1,0 +1,87 @@
+{
+  "name": "dbgenerator",
+  "displayName": "DB Model Generator",
+  "publisher": "doquochao95",
+  "description": "Auto generator database context by appsetting.json file",
+  "icon": "images/logo.png",
+  "version": "0.0.2",
+  "engines": {
+    "vscode": "^1.83.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "dbgenerator.generate",
+        "title": "Generate Database"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "dbgenerator.generate",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "type": "object",
+        "title": "DB generator configuration",
+        "properties": {
+          "dbgenerator.dbContextFolder": {
+            "type": "string",
+            "default": "Data",
+            "description": "DB context folder"
+          },
+          "dbgenerator.modelFolder": {
+            "type": "string",
+            "default": "Models",
+            "description": "Model folder"
+          },
+          "dbgenerator.appSettingFileName": {
+            "type": "string",
+            "default": "appsettings.json",
+            "description": "Model folder"
+          }
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "webpack": "webpack --mode development",
+    "webpack-dev": "webpack --mode development --watch",
+    "watch": "webpack --mode development --watch",
+    "package": "webpack --mode production --devtool hidden-source-map"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/jsonpath": "^0.2.0",
+    "@types/mocha": "^10.0.2",
+    "@types/node": "18.x",
+    "@types/vscode": "^1.83.0",
+    "@types/tedious": "^4.0.3",
+    "@vscode/test-electron": "^2.3.4",
+    "glob": "^10.3.3",
+    "mocha": "^10.2.0",
+    "prettier": "3.0.0",
+    "ts-loader": "^9.4.4",
+    "typescript": "^5.2.2",
+    "webpack": "^5.88.2",
+    "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "command-exists": "^1.2.9",
+		"date-format": "^3.0.0",
+    "sqlstring": "^2.3.2",
+    "portfinder": "^1.0.26",
+    "ssh2": "0.5.4",
+    "lodash": "^4.17.20",
+		"lodash.defaults": "^4.1.0"
+	}
+}
