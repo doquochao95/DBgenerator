@@ -2,6 +2,8 @@ import * as fs from 'fs';
 import glob = require('glob');
 import { dirname, join } from 'path';
 import { FilePermission, FileStat, Uri, WorkspaceFolder, window, workspace } from 'vscode';
+import { showError, showMessage, showWarning } from './dialog.helper';
+import { FileContent } from '../common/interfaces';
 
 export const findProjects = async (
   workspaceFolder: readonly WorkspaceFolder[]
@@ -66,59 +68,40 @@ export const directoryMap = async (
 /**
  * Writes data to the file specified in the path. If the file does not exist then the function will create it.
  *
- * @param {string} path - Path to the file
- * @param {string} filename - Name of the file
- * @param {string} data - Data to write to the file
+ * @param {FileContent} file - File
  * @example
  * await saveFile('src', 'file.ts', 'console.log("Hello World")');
  *
  * @returns {Promise<void>} - Confirmation of the write operation
  */
-export const saveFile = async (
-  path: string,
-  filename: string,
-  data: string,
-): Promise<void> => {
-  let folder: string = '';
-
+export const saveFile = async (file: FileContent): Promise<void> => {
   if (workspace.workspaceFolders) {
-    folder = workspace.workspaceFolders[0].uri.fsPath;
-  } else {
-    window.showErrorMessage('The file has not been created!');
-    return;
-  }
-
-  const file = join(folder, path, filename);
-
-  if (!fs.existsSync(dirname(file))) {
-    fs.mkdirSync(dirname(file), { recursive: true });
-  }
-
-  fs.access(file, (err: any) => {
-    if (err) {
-      fs.open(file, 'w+', (err: any, fd: any) => {
-        if (err) {
-          throw err;
-        }
-
-        fs.writeFile(fd, data, 'utf8', (err: any) => {
-          if (err) {
+    const rootPath = join(file.path, file.folder)
+    if (!fs.existsSync(rootPath))
+      fs.mkdirSync(rootPath, { recursive: true });
+    const filePath = join(rootPath, file.filename);
+    fs.access(filePath, (err: any) => {
+      if (err) {
+        fs.open(filePath, 'w+', (err: any, fd: any) => {
+          if (err)
             throw err;
-          }
-
-          const openPath = Uri.file(file);
-
-          workspace.openTextDocument(openPath).then((filename) => {
-            window.showTextDocument(filename);
+          fs.writeFile(fd, file.content, 'utf8', (err: any) => {
+            if (err)
+              throw err;
+            const openPath = Uri.file(filePath);
+            workspace.openTextDocument(openPath).then((filename) => {
+              window.showTextDocument(filename);
+            });
           });
         });
-      });
-
-      window.showInformationMessage('Successfully created the file!');
-    } else {
-      window.showWarningMessage('Name already exist!');
-    }
-  });
+        showMessage('Successfully created the file!');
+      } else
+        showWarning('Name already exist!');
+    });
+  }
+  else {
+    showError('The file has not been created!');
+  }
 };
 
 /**

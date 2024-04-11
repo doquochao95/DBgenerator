@@ -1,7 +1,14 @@
-import { WorkspaceConfiguration } from "vscode";
-import { DatabaseType, Types } from "./enums";
+import { Types } from "./enums";
 
+export interface FileContent {
+    path: string
+    folder: string
+    name: string
+    filename: string
+    content: string
+}
 export interface DbGeneratorConfig {
+    dbContextFileName: string;
     dbContextFolder: string;
     modelFolder: string;
     appSettingFileName: string;

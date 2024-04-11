@@ -41,6 +41,11 @@
         "type": "object",
         "title": "DB generator configuration",
         "properties": {
+          "dbgenerator.dbContextFileName": {
+            "type": "string",
+            "default": "DBContext",
+            "description": "DB context file name"
+          },
           "dbgenerator.dbContextFolder": {
             "type": "string",
             "default": "Data",
