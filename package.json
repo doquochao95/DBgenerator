@@ -16,14 +16,22 @@
   "contributes": {
     "commands": [
       {
-        "command": "dbgenerator.generate",
+        "command": "dbgenerator.database",
         "title": "Generate Database"
+      },
+      {
+        "command": "dbgenerator.repository",
+        "title": "Generate Repository"
       }
     ],
     "menus": {
       "explorer/context": [
         {
-          "command": "dbgenerator.generate",
+          "command": "dbgenerator.database",
+          "group": "navigation"
+        },
+        {
+          "command": "dbgenerator.repository",
           "group": "navigation"
         }
       ]
@@ -81,6 +89,8 @@
     "sqlstring": "^2.3.2",
     "portfinder": "^1.0.26",
     "ssh2": "0.5.4",
+    "sax": "^1.2.4",
+    "utf8": "^3.0.0",
     "lodash": "^4.17.20",
 		"lodash.defaults": "^4.1.0"
 	}

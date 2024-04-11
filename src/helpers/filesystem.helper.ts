@@ -1,7 +1,33 @@
-import { access, existsSync, mkdirSync, open, writeFile } from 'fs';
+import * as fs from 'fs';
+import glob = require('glob');
 import { dirname, join } from 'path';
-import { FilePermission, FileStat, Uri, window, workspace } from 'vscode';
+import { FilePermission, FileStat, Uri, WorkspaceFolder, window, workspace } from 'vscode';
 
+export const findProjects = async (
+  workspaceFolder: readonly WorkspaceFolder[]
+): Promise<string[]> => {
+  let result: string[] = [];
+  workspaceFolder.forEach(async folder => {
+    let files = glob.sync(`${folder.uri.fsPath}/**/*.+(csproj|fsproj)`, {
+      ignore: ['**/node_modules/**', '**/.git/**'],
+    });
+    files.forEach(file => {
+      if (result.indexOf(file) === -1) {
+        result.push(file);
+      }
+    });
+  });
+  return result;
+}
+/**
+ * Reads content of a file
+ * @param filePath  The file path
+ * @returns The file content
+ */
+export function readFileContent(filePath: string): string {
+  let fileContent = fs.readFileSync(filePath, 'utf8');
+  return fileContent;
+}
 /**
  * Reads the contents of the file specified in the path.
  *
@@ -64,18 +90,18 @@ export const saveFile = async (
 
   const file = join(folder, path, filename);
 
-  if (!existsSync(dirname(file))) {
-    mkdirSync(dirname(file), { recursive: true });
+  if (!fs.existsSync(dirname(file))) {
+    fs.mkdirSync(dirname(file), { recursive: true });
   }
 
-  access(file, (err: any) => {
+  fs.access(file, (err: any) => {
     if (err) {
-      open(file, 'w+', (err: any, fd: any) => {
+      fs.open(file, 'w+', (err: any, fd: any) => {
         if (err) {
           throw err;
         }
 
-        writeFile(fd, data, 'utf8', (err: any) => {
+        fs.writeFile(fd, data, 'utf8', (err: any) => {
           if (err) {
             throw err;
           }
@@ -114,7 +140,7 @@ export const deleteFiles = async (
   const files = await workspace.findFiles(`${path}/**/*`);
 
   files.forEach((file) => {
-    access(file.path, (err: any) => {
+    fs.access(file.path, (err: any) => {
       if (err) {
         throw err;
       }
@@ -241,8 +267,8 @@ export const setRealpath = async (path: string): Promise<Uri | FileStat> => {
   return (await workspace.fs.stat)
     ? await workspace.fs.stat(Uri.file(path))
     : await workspace
-        .openTextDocument(Uri.file(path))
-        .then((filename) => filename.uri);
+      .openTextDocument(Uri.file(path))
+      .then((filename) => filename.uri);
 };
 
 /**
@@ -281,7 +307,7 @@ export const getRealpath = async (path: string): Promise<string> => {
  * @returns {Promise<boolean>} - Confirmation of the existence
  */
 export const exists = async (path: string): Promise<boolean> => {
-  return existsSync(path);
+  return fs.existsSync(path);
 };
 
 // isDirectory

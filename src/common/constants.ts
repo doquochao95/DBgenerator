@@ -1,6 +1,6 @@
 import { DatabaseType } from "./enums";
 import { Connection } from "./interfaces";
-
+export const EFCoreDesign: string = 'Microsoft.EntityFrameworkCore.Design';
 export class ConnectionOption {
     host: string;
     port: number;

@@ -34,8 +34,75 @@ export interface FieldInfo {
     protocol41: boolean;
     type: Types;
 }
+export interface Project {
+    /**
+     * The unique id for each project
+     */
+    id: number;
+    /**
+     * The project name is the same as `[project-name]`.csproj/fsproj
+     */
+    projectName: string;
+    /**
+     * The project path
+     */
+    projectPath: string;
+    /**
+     * The packages in the project
+     */
+    packages: PackageDetail[];
+}
+export interface PackageDetail {
+    /**
+     * The package name
+     */
+    packageName: string;
+    /**
+     * The package version
+     */
+    packageVersion: string;
+}
+export interface Element {
+    /**
+     * The name of element
+     */
+    name: string;
+    /**
+     * The type of element
+     */
+    type: string;
+    /**
+     * The attributes of element
+     */
+    attributes?: any;
+    /**
+     * The children elements
+     */
+    elements: Element[];
+    /**
+     * The text of element
+     */
+    text?: string;
 
-
+    /**
+     * The tag is self closing
+     */
+    isSelfClosing?: boolean;
+}
+export interface ItemGroup {
+    /**
+     * The root xml
+     */
+    rootElement: Element;
+    /**
+     * The index of ItemGroup tag
+     */
+    itemGroupIndex: number;
+    /**
+     * The root element is <Project Sdk="Microsoft...">
+     */
+    projectElement: Element;
+}
 export interface ColumnMeta {
     /**
      * column name.
