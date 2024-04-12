@@ -77,9 +77,10 @@
     "@types/jsonpath": "^0.2.0",
     "@types/mocha": "^10.0.2",
     "@types/node": "18.x",
-    "@types/vscode": "^1.83.0",
     "@types/tedious": "^4.0.3",
+    "@types/vscode": "^1.83.0",
     "@vscode/test-electron": "^2.3.4",
+    "encoding": "^0.1.13",
     "glob": "^10.3.3",
     "mocha": "^10.2.0",
     "prettier": "3.0.0",
@@ -90,13 +91,13 @@
   },
   "dependencies": {
     "command-exists": "^1.2.9",
-		"date-format": "^3.0.0",
-    "sqlstring": "^2.3.2",
-    "portfinder": "^1.0.26",
-    "ssh2": "0.5.4",
-    "sax": "^1.2.4",
-    "utf8": "^3.0.0",
+    "date-format": "^3.0.0",
     "lodash": "^4.17.20",
-		"lodash.defaults": "^4.1.0"
-	}
+    "lodash.defaults": "^4.1.0",
+    "portfinder": "^1.0.26",
+    "sax": "^1.2.4",
+    "sqlstring": "^2.3.2",
+    "ssh2": "^1.15.0",
+    "utf8": "^3.0.0"
+  }
 }
