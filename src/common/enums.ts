@@ -13,6 +13,10 @@ export enum pcStatus {
     PEENDING="PEENDING", FREE="FREE", BUSY="BUSY"
 }
 
+export enum Confirm {
+    YES = "YES", NO = "NO"
+}
+
 export const enum Types {
     DECIMAL = 0x00, // aka DECIMAL (http://dev.mysql.com/doc/refman/5.0/en/precision-math-decimal-changes.html)
     TINY = 0x01, // aka TINYINT, 1 byte

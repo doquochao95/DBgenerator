@@ -2,80 +2,87 @@ import * as vscode from 'vscode';
 import * as pathLib from 'path';
 import glob = require('glob');
 import { Connection, DbGeneratorConfig, PackageDetail, Project } from '../common/interfaces';
-import { pickManyItems, pickSingleItem, showError, showMessage } from '../helpers/dialog.helper';
+import { confirm, pickManyItems, pickSingleItem, showError, showMessage } from '../helpers/dialog.helper';
 import { GenType } from '../common/enums';
 import { ConnectionOption, EFCoreDesign, SDCores } from '../common/constants';
-import { findProjects, readFileContent, runCommand, saveFile } from '../helpers';
+import { execShell, findProjects, readFileContent, runCommand, saveFile } from '../helpers';
 import { getPackages } from '../helpers/xml.helper';
 import { execute } from '../helpers/sql.helper';
 import { getIRepoFile, getRepoFile } from '../helpers/content.helper';
 
 export class GeneratorController {
-    constructor(private readonly config: DbGeneratorConfig) { }
-    public async genDatabase(uri: vscode.Uri, workspacePath: readonly vscode.WorkspaceFolder[]) {
-        const isChecked = await this.checkPackage(EFCoreDesign, uri, workspacePath)
+
+    _isAllowGenRepo: boolean
+    _connectionString: Connection
+    _uri: vscode.Uri
+
+    constructor(private readonly config: DbGeneratorConfig, private workspacePath: readonly vscode.WorkspaceFolder[]) { }
+    public async genDatabase(uri: vscode.Uri) {
+        this._uri = uri
+        const isChecked = await this.checkPackage(EFCoreDesign)
         if (isChecked) {
-            const uriType = (await vscode.workspace.fs.stat(uri)).type
+            const uriType = (await vscode.workspace.fs.stat(this._uri)).type
             if (uriType == vscode.FileType.File)
-                await this.onFile(uri)
+                await this.onFile()
             else if (uriType == vscode.FileType.Directory)
-                await this.onFolder(uri)
+                await this.onFolder()
             else
                 showError('Selected item type is not supported');
         }
     }
-    public async genRepository(uri: vscode.Uri, workspacePath: readonly vscode.WorkspaceFolder[]) {
-        const isChecked = await this.checkPackage(SDCores, uri, workspacePath)
+    public async genRepository(uri: vscode.Uri, getConnectionString: boolean = true) {
+        this._uri = uri
+        const isChecked = await this.checkPackage(SDCores)
         if (isChecked) {
             const uriType = (await vscode.workspace.fs.stat(uri)).type
             if (uriType == vscode.FileType.File)
-                await this.onFile(uri, true)
+                await this.onFile(true, getConnectionString)
             else if (uriType == vscode.FileType.Directory)
-                await this.onFolder(uri, true)
+                await this.onFolder(true, getConnectionString)
             else
                 showError('Selected item type is not supported');
         }
     }
-    private async onFile(uri: vscode.Uri, isGenRepo: boolean = false) {
-        if (uri.fsPath.includes(this.config.appSettingFileName)) {
-            const connectionString = await this.readConnectionString(uri) as Connection;
-            if (connectionString !== undefined)
-                isGenRepo ? await this.createRepo(pathLib.dirname(uri.fsPath), connectionString) : await this.selectGenType(pathLib.dirname(uri.fsPath), connectionString)
+    private async onFile(isGenRepo: boolean = false, getConnectionString: boolean = true) {
+        if (this._uri.fsPath.includes(this.config.appSettingFileName)) {
+            if (getConnectionString)
+                this._connectionString = await this.readConnectionString(this._uri) as Connection;
+            if (this._connectionString !== undefined)
+                isGenRepo ? await this.createRepo(pathLib.dirname(this._uri.fsPath)) : await this.selectGenType(pathLib.dirname(this._uri.fsPath))
         }
         else
             showError('Selected file needed to be appsettings.json file');
     }
-    private async onFolder(uri: vscode.Uri, isGenRepo: boolean = false) {
-        await vscode.workspace.fs.readDirectory(uri).then(async res => {
+    private async onFolder(isGenRepo: boolean = false, getConnectionString: boolean = true) {
+        await vscode.workspace.fs.readDirectory(this._uri).then(async res => {
             if (res.some(x => x[0] === this.config.appSettingFileName && x[1] === vscode.FileType.File)) {
-                const connectionString = await this.readConnectionString(vscode.Uri.joinPath(uri, this.config.appSettingFileName)) as Connection;
-                if (connectionString !== undefined)
-                    isGenRepo ? await this.createRepo(uri.fsPath, connectionString) : await this.selectGenType(uri.fsPath, connectionString)
+                if (getConnectionString)
+                    this._connectionString = await this.readConnectionString(vscode.Uri.joinPath(this._uri, this.config.appSettingFileName)) as Connection;
+                if (this._connectionString !== undefined)
+                    isGenRepo ? await this.createRepo(this._uri.fsPath) : await this.selectGenType(this._uri.fsPath)
             }
             else
                 showError('Can not find appsettings.json file');
         });
     }
-    private async selectGenType(path: string, connectionString: Connection) {
+    private async selectGenType(path: string) {
         const obj = Object.keys(GenType)
         const quickPickItems: vscode.QuickPickItem[] = [
             { label: obj[Object.values(GenType).indexOf(GenType.All)], detail: GenType.All },
             { label: obj[Object.values(GenType).indexOf(GenType.Specific)], detail: GenType.Specific }
         ];
-        await pickSingleItem(quickPickItems, 'What type of generation do you want ?')
-            .then(async res => {
-                switch (res.detail) {
-                    case GenType.All:
-                        await this.callGenAll(path, connectionString)
-                        break;
-                    case GenType.Specific:
-                        await this.callGenSpecific(path, connectionString)
-                        break;
-                }
-            })
-            .catch(error => {
-                showMessage(error);
-            })
+        const genType = await pickSingleItem(quickPickItems, 'What type of generation do you want ?')
+        if (genType == undefined)
+            return showError('Not pick item yet')
+        this._isAllowGenRepo = await confirm('Auto generate repository after database generation ?')
+        switch (genType.detail) {
+            case GenType.All:
+                await this.callGenAll(path, this._connectionString)
+                break;
+            case GenType.Specific:
+                await this.callGenSpecific(path, this._connectionString)
+                break;
+        }
     }
     private async readConnectionString(uri: vscode.Uri) {
         const result = await vscode.workspace.fs.readFile(uri).then(async res => {
@@ -89,20 +96,28 @@ export class GeneratorController {
                 return { label: item.name, detail: item.connectionString };
             });
             const pickedItem = await pickSingleItem(quickPickItems, 'Select connection string')
-                .then(value => {
-                    return connections.find(x => x.name === value.label);
-                })
-                .catch(error => {
-                    showError(error);
-                    return undefined;
-                });
-            return pickedItem;
+            if (pickedItem == undefined) {
+                showError('Not pick item yet');
+                return undefined;
+            }
+            return connections.find(x => x.name === pickedItem.label);
         });
         return result;
     }
     private async callGenAll(path: string, connectionString: Connection) {
         const command = `dotnet ef dbcontext scaffold "${connectionString.connectionString}" Microsoft.EntityFrameworkCore.SqlServer --context ${this.config.dbContextFileName} --context-dir ${this.config.dbContextFolder} --output-dir ${this.config.modelFolder} --data-annotations --use-database-names --no-onconfiguring --no-pluralize  --force`
-        await runCommand(path, command)
+        const commandResult = await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+        }, async (progress) => {
+            progress.report({
+                message: `Building...`,
+            });
+            return await runCommand(path, command)
+        })
+        if (commandResult?.indexOf('Build succeeded') != -1)
+            this._isAllowGenRepo ? await this.genRepository(this._uri, false) : showMessage('Build succeeded')
+        else
+            showError('Build failed')
     }
     private async callGenSpecific(path: string, connectionString: Connection) {
         const tableNames = await this.getTableNames(connectionString);
@@ -111,7 +126,18 @@ export class GeneratorController {
             if (selectedTables) {
                 const tableString = selectedTables.join(` --table `)
                 const command = `dotnet ef dbcontext scaffold "${connectionString.connectionString}" Microsoft.EntityFrameworkCore.SqlServer --table ${tableString} --context ${this.config.dbContextFileName} --context-dir ${this.config.dbContextFolder} --output-dir ${this.config.modelFolder} --data-annotations --use-database-names --no-onconfiguring --no-pluralize  --force`
-                await runCommand(path, command)
+                const commandResult = await vscode.window.withProgress({
+                    location: vscode.ProgressLocation.Notification,
+                }, async (progress) => {
+                    progress.report({
+                        message: `Building...`,
+                    });
+                    return await runCommand(path, command)
+                })
+                if (commandResult?.indexOf('Build succeeded') != -1)
+                    this._isAllowGenRepo ? await this.genRepository(this._uri, false) : showMessage('Build succeeded')
+                else
+                    showError('Build failed')
             }
         }
     }
@@ -139,18 +165,15 @@ export class GeneratorController {
             return { label: item };
         });
         const pickedItem = await pickManyItems(quickPickItems, 'Select tables')
-            .then(value => {
-                const result = value.map(x => x.label)
-                return result;
-            })
-            .catch(error => {
-                showMessage(error);
-                return undefined;
-            });
-        return pickedItem;
+        if (pickedItem == undefined) {
+            showError('Not pick item yet');
+            return undefined;
+        }
+        const result = pickedItem.map(x => x.label)
+        return result;
     }
-    private async checkPackage(name: string, uri: vscode.Uri, workspacePath: readonly vscode.WorkspaceFolder[]) {
-        const project = await this.getProjectList(uri, workspacePath);
+    private async checkPackage(name: string) {
+        const project = await this.getProjectList();
         if (project == undefined) {
             showError('Can not find .csproj C# project file');
             return false
@@ -161,10 +184,10 @@ export class GeneratorController {
         }
         return true
     }
-    private async getProjectList(uri: vscode.Uri, workspacePath: readonly vscode.WorkspaceFolder[]) {
+    private async getProjectList() {
         let projectID = 1;
         let projectList: Project[] = [];
-        const projectPathList = await findProjects(workspacePath)
+        const projectPathList = await findProjects(this.workspacePath)
         for (const pathIndex in projectPathList) {
             const projectPath = projectPathList[pathIndex];
             const originalData: string = readFileContent(projectPath);
@@ -192,19 +215,17 @@ export class GeneratorController {
                 }),
             });
         }
-        const uriType = (await vscode.workspace.fs.stat(uri)).type
-        let file = glob.sync(uri.fsPath)[0];
+        const uriType = (await vscode.workspace.fs.stat(this._uri)).type
+        let file = glob.sync(this._uri.fsPath)[0];
         const result = projectList.find(x =>
             pathLib.dirname(x.projectPath) === (uriType == vscode.FileType.File ? pathLib.dirname(file) : file)
         )
         return result
     }
-    private async createRepo(path: string, connectionString: Connection) {
-        const tableNames = await this.getTableNames(connectionString);
-        const irepo = getIRepoFile(path, tableNames, this.config)
-        const repo = getRepoFile(path, tableNames, this.config)
-        await saveFile(irepo);
-        await saveFile(repo);
+    private async createRepo(path: string) {
+        const tableNames = await this.getTableNames(this._connectionString);
+        const repofile = [getIRepoFile(path, tableNames, this.config), getRepoFile(path, tableNames, this.config)]
+        repofile.forEach(async file => { await saveFile(file); })
     }
 }
 

@@ -1,4 +1,5 @@
 import { QuickPickItem, QuickPickOptions, window } from 'vscode';
+import { Confirm } from '../common/enums';
 
 /**
  * Displays a message box with the provided message
@@ -68,11 +69,11 @@ export const pickManyItems = async (
   items: QuickPickItem[],
   placeHolder: string,
 ): Promise<QuickPickItem[] | undefined> => {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     setTimeout(() => {
       window.showQuickPick(items, { placeHolder: placeHolder, canPickMany: true }).then(
         selected => {
-          selected === undefined ? reject('Not pick item yet') : resolve(selected);
+          resolve(selected);
         }
       );
     }, 1000);
@@ -81,7 +82,7 @@ export const pickManyItems = async (
 /**
  * Displays a message box with the provided message
  *
- * @param {string[]} items - The list of items to select from
+ * @param {QuickPickItem[]} items - The list of items to select from
  * @param {string} placeHolder - The input placeholder
  * @example
  * const item = await pickItem(['foo', 'bar'], 'Select an item');
@@ -92,16 +93,27 @@ export const pickSingleItem = async (
   items: QuickPickItem[],
   placeHolder: string,
 ): Promise<QuickPickItem | undefined> => {
-  return new Promise((resolve, reject) => {
+  return new Promise(resolve => {
     setTimeout(() => {
       window.showQuickPick(items, { placeHolder: placeHolder, canPickMany: false }).then(
         selected => {
-          selected === undefined ? reject('Not pick item yet') : resolve(selected);
+          resolve(selected);
         }
       );
     }, 1000);
   });
 };
+export const confirm = async (
+  placeHolder: string
+): Promise<boolean> => {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      window.showQuickPick([Confirm.YES, Confirm.NO], { placeHolder }).then((res) => {
+        res == Confirm.YES ? resolve(true) : resolve(false)
+      })
+    }, 1000);
+  });
+}
 /**
  * Displays a message box with the provided message
  *

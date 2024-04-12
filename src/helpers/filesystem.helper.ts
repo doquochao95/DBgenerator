@@ -80,24 +80,17 @@ export const saveFile = async (file: FileContent): Promise<void> => {
     if (!fs.existsSync(rootPath))
       fs.mkdirSync(rootPath, { recursive: true });
     const filePath = join(rootPath, file.filename);
-    fs.access(filePath, (err: any) => {
+    fs.writeFile(filePath, file.content, { encoding: 'utf8', flag: 'w' }, err => {
       if (err) {
-        fs.open(filePath, 'w+', (err: any, fd: any) => {
-          if (err)
-            throw err;
-          fs.writeFile(fd, file.content, 'utf8', (err: any) => {
-            if (err)
-              throw err;
-            const openPath = Uri.file(filePath);
-            workspace.openTextDocument(openPath).then((filename) => {
-              window.showTextDocument(filename);
-            });
-          });
-        });
-        showMessage('Successfully created the file!');
-      } else
-        showWarning('Name already exist!');
-    });
+        showError(`The file ${file.filename} has not been created!`);
+        throw err;
+      }
+      showMessage('Successfully created the file!');
+      const openPath = Uri.file(filePath);
+      workspace.openTextDocument(openPath).then((filename) => {
+        window.showTextDocument(filename);
+      });
+    })
   }
   else {
     showError('The file has not been created!');

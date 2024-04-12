@@ -1,6 +1,5 @@
-import { Terminal, window } from 'vscode';
 import { getRealpath } from './filesystem.helper';
-
+import * as cp from "child_process";
 /**
  * Runs a command in the terminal
  *
@@ -14,12 +13,18 @@ import { getRealpath } from './filesystem.helper';
 export const runCommand = async (
   path: string,
   command: string,
-): Promise<void> => {
+): Promise<string | undefined> => {
   path = await getRealpath(path)
-  const terminal = window.terminals.some(x => x.name === "DB Generator")
-    ? window.terminals.find(x => x.name === "DB Generator") as Terminal
-    : window.createTerminal("DB Generator");
-  terminal.show();
-  terminal.sendText(`cd ${path}`);
-  terminal.sendText(command);
+  try {
+    const result = await execShell(`${command}`, path)
+    return result
+  } catch {
+    return undefined
+  }
 };
+export const execShell = async (cmd: string, path: string) =>
+  new Promise<string>(resolve => {
+    var cmdOpts = { cwd: `${path}` };
+    const result = cp.execSync(cmd, cmdOpts);
+    resolve(result.toString("utf8"))
+  });
