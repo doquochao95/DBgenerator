@@ -12,9 +12,7 @@ export async function execute(connection: ConnectionOption): Promise<TableModel[
       else {
         const sql = `SELECT *
                   FROM INFORMATION_SCHEMA.TABLES
-                  WHERE
-                  TABLE_TYPE = 'BASE TABLE'
-                  AND TABLE_CATALOG = '${connection.database}' order by TABLE_NAME`
+                  WHERE TABLE_CATALOG = '${connection.database}' order by TABLE_NAME`
         await QueryUnit.queryPromise<TableModel[]>(newConnection, sql)
           .then(res => {
             const result: TableModel[] = res.rows

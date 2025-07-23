@@ -85,7 +85,6 @@ export const saveFile = async (file: FileContent): Promise<void> => {
         showError(`The file ${file.filename} has not been created!`);
         throw err;
       }
-      showMessage('Successfully created the file!');
       const openPath = Uri.file(filePath);
       workspace.openTextDocument(openPath).then((filename) => {
         window.showTextDocument(filename);

@@ -6,10 +6,10 @@ import { getConfiguration } from './helpers/config.helper';
 export function activate(context: vscode.ExtensionContext) {
     const generatorController = new GeneratorController(getConfiguration(), vscode.workspace.workspaceFolders);
     const databaseCommand = vscode.commands.registerCommand('dbgenerator.database', async (uri: vscode.Uri) => {
-        await generatorController.genDatabase(uri)
+        await generatorController.genDatabase(uri, true, false)
     });
     const repositoryCommand = vscode.commands.registerCommand('dbgenerator.repository', async (uri: vscode.Uri) => {
-        await generatorController.genRepository(uri)
+        await generatorController.genDatabase(uri, false, true)
     });
     context.subscriptions.push(
         databaseCommand,

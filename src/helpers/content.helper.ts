@@ -43,7 +43,7 @@ namespace ${root}.${folder}
         public RepositoryAccessor(${config.dbContextFileName} dbContext)
         {
             _dbContext = dbContext;
-            ${repo.join('\n             ')}
+            ${repo.join('\n            ')}
         }
         ${irepo.join('\n        ')}
         public async Task<bool> Save()
