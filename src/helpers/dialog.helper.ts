@@ -1,5 +1,6 @@
 import { QuickPickItem, QuickPickOptions, window } from 'vscode';
 import { Confirm } from '../common/enums';
+import { QuickPickModel } from '../common';
 
 /**
  * Displays a message box with the provided message
@@ -66,16 +67,33 @@ export const getName = async (
  * @returns {Promise<QuickPickItem[] | undefined>} - The selected items
  */
 export const pickManyItems = async (
-  items: QuickPickItem[],
+  items: QuickPickModel[],
   placeHolder: string,
-): Promise<QuickPickItem[] | undefined> => {
+): Promise<QuickPickModel[] | undefined> => {
   return new Promise((resolve) => {
     setTimeout(() => {
-      window.showQuickPick(items, { placeHolder: placeHolder, canPickMany: true }).then(
-        selected => {
-          resolve(selected);
-        }
-      );
+      let quickPick = window.createQuickPick()
+      quickPick.items = items.map(x => x.item)
+      quickPick.placeholder = placeHolder
+      quickPick.canSelectMany = true
+      quickPick.onDidAccept(() => {
+        let selectedItems: QuickPickModel[] = items
+          .filter(x => quickPick.selectedItems
+            .some(y => (y.label === x.item.label)))
+        quickPick.hide()
+        resolve(selectedItems);
+      });
+      quickPick.onDidChangeSelection(() => {
+        let selectedItems: QuickPickModel[] = items
+          .filter(x => quickPick.selectedItems
+            .some(y => (y.label === x.item.label)))
+        selectedItems = selectedItems.filter(x => x.info.length > 0)
+        quickPick.selectedItems = selectedItems.map(x => x.item)
+      });
+      quickPick.onDidHide(() => {
+        quickPick.dispose()
+      });
+      quickPick.show()
     }, 1000);
   });
 };

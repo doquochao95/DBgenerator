@@ -4,13 +4,15 @@ export enum DatabaseType {
     MSSQL = "SqlServer", MONGO_DB = "MongoDB",
     ES = "ElasticSearch", REDIS = "Redis", SSH = "SSH", FTP = "FTP"
 }
-
+export enum SQLSchemaType {
+    PROCEDURE = "PROCEDURE", FUNCTION = "FUNCTION", TABLE = "BASE TABLE", VIEW = "VIEW"
+}
 export enum GenType {
     All = "Generate all tables", Specific = "Choose tables for generation"
 }
 
 export enum pcStatus {
-    PEENDING="PEENDING", FREE="FREE", BUSY="BUSY"
+    PEENDING = "PEENDING", FREE = "FREE", BUSY = "BUSY"
 }
 
 export enum Confirm {
@@ -50,3 +52,41 @@ export const enum Types {
     STRING = 0xfe, // aka CHAR, BINARY
     GEOMETRY = 0xff, // aka GEOMETRY
 }
+export enum SqlStringDataTypes {
+    nchar = "string",
+    ntext = "string",
+    nvarchar = "string",
+    text = "string",
+    varchar = "string",
+    xml = "string"
+};
+export enum SqlOtherDataTypes {
+    bigint = "long",
+    decimal = "decimal",
+    float = "double",
+    int = "int",
+    money = "decimal",
+    numeric = "decimal",
+    real = "Single",
+    smallint = "short",
+    smallmoney = "decimal",
+
+    date = "DateTime",
+    datetime = "DateTime",
+    datetime2 = "DateTime",
+    datetimeoffset = "DateTimeOffset",
+    smalldatetime = "DateTime",
+    time = "TimeSpan",
+
+    char = "char",
+    binary = "byte[]",
+    bit = "bool",
+    filestream = "byte[]",
+    image = "byte[]",
+    rowversion = "byte[]",
+    sql_variant = "object",
+    timestamp = "byte[]",
+    tinyint = "byte",
+    uniqueidentifier = "Guid",
+    varbinary = "byte[]"
+};

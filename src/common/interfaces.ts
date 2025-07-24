@@ -1,3 +1,4 @@
+import { QuickPickItem } from "vscode";
 import { Types } from "./enums";
 
 export interface FileContent {
@@ -23,7 +24,37 @@ export interface TableModel {
     TABLE_SCHEMA: string;
     TABLE_TYPE: string;
 }
-
+export interface RoutineModel {
+    ROUTINE_CATALOG: string;
+    ROUTINE_NAME: string;
+    ROUTINE_SCHEMA: string;
+    ROUTINE_TYPE: string;
+}
+export interface CommonModel {
+    CATALOG: string;
+    NAME: string;
+    SCHEMA: string;
+    TYPE: string;
+}
+export interface ColumnInfoModel {
+    NAME: string;
+    TYPE: string;
+}
+export interface QuickPickModel {
+    id: string
+    info: ColumnInfoModel[]
+    item: QuickPickItem,
+}
+export interface StoreProcedureInfoModel {
+    storeName: string
+    variables: VariableInfoModel[]
+}
+export interface VariableInfoModel {
+    columnName: string
+    variableName: string
+    sqlType: string
+    dataType: string
+}
 export interface FieldInfo {
     catalog: string;
     db: string;

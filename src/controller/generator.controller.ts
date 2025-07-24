@@ -1,14 +1,14 @@
 import * as vscode from 'vscode';
 import * as pathLib from 'path';
 import glob = require('glob');
-import { Connection, DbGeneratorConfig, PackageDetail, Project, TableModel } from '../common/interfaces';
+import { ColumnInfoModel, CommonModel, Connection, DbGeneratorConfig, PackageDetail, Project, QuickPickModel, StoreProcedureInfoModel, TableModel, VariableInfoModel } from '../common/interfaces';
 import { confirm, pickManyItems, pickSingleItem, showError, showMessage } from '../helpers/dialog.helper';
-import { GenType } from '../common/enums';
+import { GenType, SqlOtherDataTypes, SQLSchemaType, SqlStringDataTypes } from '../common/enums';
 import { ConnectionOption, EFCoreDesign, SDCores } from '../common/constants';
 import { execShell, findProjects, readFileContent, runCommand, saveFile } from '../helpers';
 import { getPackages } from '../helpers/xml.helper';
-import { execute } from '../helpers/sql.helper';
-import { getIRepoFile, getRepoFile } from '../helpers/content.helper';
+import { queryStoredProcedures, queryStoredProceduresInfo, queryTables, queryViews } from '../helpers/sql.helper';
+import { getDbContextFile, getIRepoFile, getModelFile, getRepoFile } from '../helpers/content.helper';
 
 export class GeneratorController {
 
@@ -84,16 +84,22 @@ export class GeneratorController {
     }
     private async callGenTable(genType: string) {
         const tables = await this.getTableList();
-        if (tables.length == 0)
+        const views = await this.getViewList();
+        if (tables.length == 0 && views.length == 0)
             return showError('Empty database')
         const selectedTables = genType == GenType.All
-            ? tables.map(x => x.TABLE_NAME)
-            : await this.getPickedTables(tables) as string[];
+            ? [...tables.filter(x => x.id), ...views.filter(x => x.id)]
+            : await this.getPickedTables([...tables, ...views], 'Select tables/views') as QuickPickModel[];
         if (selectedTables.length == 0)
             return showError('There is nothing to generate')
+        await this.createModel(selectedTables.map(x => x.id))
+        await this.createRepo(selectedTables.map(x => x.id))
         setTimeout(async () => {
-            await this.createModel(selectedTables)
-            await this.createRepo(selectedTables)
+            const procedures = await this.getStoredProcedureList();
+            if (procedures.length > 0 && await confirm('Continue creating models related to Stored Procedures ?')) {
+                const selectedProcedures = await this.getPickedTables(procedures, 'Select stored procedure') as QuickPickModel[];
+                await this.genStoreProcedure(selectedProcedures)
+            }
         }, 300)
     }
     private async getTableList() {
@@ -102,24 +108,98 @@ export class GeneratorController {
             { location: vscode.ProgressLocation.Notification },
             async (progress) => {
                 progress.report({ message: `Loading tables from database` });
-                return await execute(connectionOption)
-                    .then(async result => { return result })
+                let result: QuickPickModel[] = []
+                const tables: QuickPickModel[] = await queryTables(connectionOption)
+                    .then(async result => result.map(item => {
+                        return <QuickPickModel>{
+                            id: item.NAME,
+                            item: <vscode.QuickPickItem>{ label: item.NAME }
+                        }
+                    }))
                     .catch(error => {
                         showError(`${error.code} : ${error.message}`);
-                        return undefined
+                        return []
                     })
-            }) as TableModel[];
+                if (tables.length > 0) {
+                    result.push(<QuickPickModel>{ item: { label: SQLSchemaType.TABLE, kind: vscode.QuickPickItemKind.Separator } })
+                    result.push(...tables)
+                }
+                return result
+            }) as QuickPickModel[];
     }
-    private async getPickedTables(tables: TableModel[]) {
-        const quickPickItems: vscode.QuickPickItem[] = tables.map(item => {
-            return <vscode.QuickPickItem>{ label: item.TABLE_NAME, description: item.TABLE_TYPE };
-        });
-        const pickedItem = await pickManyItems(quickPickItems, 'Select tables')
+    private async getViewList() {
+        const connectionOption = new ConnectionOption(this._connection)
+        return await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification },
+            async (progress) => {
+                progress.report({ message: `Loading views from database` });
+                let result: QuickPickModel[] = []
+                const views: QuickPickModel[] = await queryViews(connectionOption)
+                    .then(async result => result.map(item => {
+                        return <QuickPickModel>{
+                            id: item.NAME,
+                            item: <vscode.QuickPickItem>{ label: item.NAME }
+                        }
+                    }))
+                    .catch(error => {
+                        showError(`${error.code} : ${error.message}`);
+                        return []
+                    })
+                if (views.length > 0) {
+                    result.push(<QuickPickModel>{ item: { label: SQLSchemaType.VIEW, kind: vscode.QuickPickItemKind.Separator } })
+                    result.push(...views)
+                }
+                return result
+            }) as QuickPickModel[];
+    }
+    private async getStoredProcedureList() {
+        const connectionOption = new ConnectionOption(this._connection)
+        return await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification },
+            async (progress) => {
+                progress.report({ message: `Loading stored procedure from database` });
+                let result: QuickPickModel[] = []
+
+                const procedures: QuickPickModel[] = await queryStoredProcedures(connectionOption)
+                    .then(async result => {
+                        return await Promise.all(result.map(async (item): Promise<QuickPickModel> => {
+                            const info: ColumnInfoModel[] = await queryStoredProceduresInfo(connectionOption, item.NAME)
+                                .then(result => {
+                                    return result.filter(x => x.NAME && x.TYPE)
+                                })
+                                .catch(error => {
+                                    showError(`${error.code} : ${error.message}`);
+                                    return []
+                                })
+                            const distinctArray = Array.from(new Set(info.map(x => JSON.stringify(x)))).map(x => JSON.parse(x));
+                            return <QuickPickModel>{
+                                id: item.NAME,
+                                info: distinctArray,
+                                item: <vscode.QuickPickItem>{
+                                    label: item.NAME,
+                                    description: info.length == 0 ? 'not supported' : '',
+                                }
+                            }
+                        }))
+                    })
+                    .catch(error => {
+                        showError(`${error.code} : ${error.message}`);
+                        return []
+                    })
+                if (procedures.length > 0) {
+                    result.push(<QuickPickModel>{ item: { label: SQLSchemaType.PROCEDURE, kind: vscode.QuickPickItemKind.Separator } })
+                    result.push(...procedures)
+                }
+                return result
+            }) as QuickPickModel[];
+    }
+    private async getPickedTables(tables: QuickPickModel[], placeHolder: string) {
+        const pickedItem = await pickManyItems(tables, placeHolder)
         if (pickedItem == undefined) {
             showError('Not pick item yet');
             return undefined;
         }
-        return pickedItem.map(x => x.label);
+        return pickedItem;
     }
     private async createModel(selectedTables: string[]) {
         if (this._isAllowGenModel && await this.checkPackage(EFCoreDesign)) {
@@ -140,6 +220,33 @@ export class GeneratorController {
             repofile.forEach(async file => { await saveFile(file); })
             showMessage('Successfully generate repository files !');
         }
+    }
+    private async genStoreProcedure(selectedProcedures: QuickPickModel[]) {
+        const regexp = /([A-Za-z0-9]+)(\((.*)\)|(.*))/
+        const storeList: StoreProcedureInfoModel[] = selectedProcedures.map(x => {
+            return <StoreProcedureInfoModel>{
+                storeName: x.id,
+                variables: x.info.map(x => {
+                    const typeStr = regexp.exec(x.TYPE)[1]
+                    return <VariableInfoModel>{
+                        columnName: x.NAME,
+                        variableName: x.NAME?.trim().replace(/[^\p{L}\d\s]+/gu, '').replace(/\s+/g, "_"),
+                        sqlType: x.TYPE,
+                        dataType: SqlStringDataTypes[typeStr] ? SqlStringDataTypes[typeStr] as string : SqlOtherDataTypes[typeStr] as string + "?"
+                    }
+                })
+            }
+        })
+        await this.updateStoreProcedure(storeList)
+    }
+    private async updateStoreProcedure(storeList: StoreProcedureInfoModel[]) {
+        storeList.forEach(async store => {
+            const modelContent = getModelFile(this._path, store, this.config)
+            await saveFile(modelContent);
+        })
+        const dbContextContent = getDbContextFile(this._path, storeList, this.config)
+        await saveFile(dbContextContent);
+        showMessage('Successfully generate stored procedure !');
     }
     private async checkPackage(name: string) {
         const project = await this.getProjectList();
