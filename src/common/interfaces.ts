@@ -13,6 +13,8 @@ export interface DbGeneratorConfig {
     dbContextFolder: string;
     modelFolder: string;
     appSettingFileName: string;
+    repoFileName: string;
+    repoFolder: string;
 }
 export interface Connection {
     name: string;

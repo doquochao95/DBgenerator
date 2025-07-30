@@ -16,22 +16,22 @@
   "contributes": {
     "commands": [
       {
-        "command": "dbgenerator.database",
+        "command": "dbgenerator.generate",
         "title": "Generate Database"
       },
       {
-        "command": "dbgenerator.repository",
-        "title": "Generate Repository"
+        "command": "dbgenerator.regenerate",
+        "title": "Regenerate Database"
       }
     ],
     "menus": {
       "explorer/context": [
         {
-          "command": "dbgenerator.database",
+          "command": "dbgenerator.generate",
           "group": "navigation"
         },
         {
-          "command": "dbgenerator.repository",
+          "command": "dbgenerator.regenerate",
           "group": "navigation"
         }
       ]
@@ -60,6 +60,16 @@
             "type": "string",
             "default": "appsettings.json",
             "description": "Model folder"
+          },
+          "dbgenerator.repoFileName": {
+            "type": "string",
+            "default": "RepositoryAccessor",
+            "description": "Repository file name"
+          },
+          "dbgenerator.repoFolder": {
+            "type": "string",
+            "default": "_Repositories",
+            "description": "Repository folder"
           }
         }
       }

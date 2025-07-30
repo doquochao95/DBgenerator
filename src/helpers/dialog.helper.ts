@@ -70,13 +70,15 @@ export const pickManyItems = async (
   items: QuickPickModel[],
   placeHolder: string,
 ): Promise<QuickPickModel[] | undefined> => {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     setTimeout(() => {
       let quickPick = window.createQuickPick()
+      let isAccept = false
       quickPick.items = items.map(x => x.item)
       quickPick.placeholder = placeHolder
       quickPick.canSelectMany = true
       quickPick.onDidAccept(() => {
+        isAccept = true
         let selectedItems: QuickPickModel[] = items
           .filter(x => quickPick.selectedItems
             .some(y => (y.label === x.item.label)))
@@ -92,6 +94,7 @@ export const pickManyItems = async (
       });
       quickPick.onDidHide(() => {
         quickPick.dispose()
+        if (!isAccept) reject()
       });
       quickPick.show()
     }, 1000);
@@ -108,16 +111,29 @@ export const pickManyItems = async (
  * @returns {Promise<QuickPickItem | undefined>} - The selected item
  */
 export const pickSingleItem = async (
-  items: QuickPickItem[],
+  items: QuickPickModel[],
   placeHolder: string,
-): Promise<QuickPickItem | undefined> => {
-  return new Promise(resolve => {
+): Promise<QuickPickModel | undefined> => {
+  return new Promise((resolve, reject) => {
     setTimeout(() => {
-      window.showQuickPick(items, { placeHolder: placeHolder, canPickMany: false }).then(
-        selected => {
-          resolve(selected);
-        }
-      );
+      let quickPick = window.createQuickPick()
+      let isAccept = false
+      quickPick.items = items.map(x => x.item)
+      quickPick.placeholder = placeHolder
+      quickPick.canSelectMany = false
+      quickPick.onDidAccept(() => {
+        isAccept = true
+        let selectedItems: QuickPickModel[] = items
+          .filter(x => quickPick.selectedItems
+            .some(y => (y.label === x.item.label)))
+        quickPick.hide()
+        resolve(selectedItems[0]);
+      });
+      quickPick.onDidHide(() => {
+        quickPick.dispose()
+        if (!isAccept) reject()
+      });
+      quickPick.show()
     }, 1000);
   });
 };

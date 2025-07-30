@@ -10,10 +10,14 @@ export function getConfiguration(): DbGeneratorConfig {
   const dbContextFolder = vscode.workspace.getConfiguration('dbgenerator').get("dbContextFolder") as string;
   const modelFolder = vscode.workspace.getConfiguration('dbgenerator').get("modelFolder") as string;
   const appSettingFileName = vscode.workspace.getConfiguration('dbgenerator').get("appSettingFileName") as string;
+  const repoFileName = vscode.workspace.getConfiguration('dbgenerator').get("repoFileName") as string;
+  const repoFolder = vscode.workspace.getConfiguration('dbgenerator').get("repoFolder") as string;
   return {
     dbContextFileName,
     dbContextFolder,
     modelFolder,
-    appSettingFileName
+    appSettingFileName,
+    repoFileName,
+    repoFolder
   };
 }

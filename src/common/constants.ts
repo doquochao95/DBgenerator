@@ -48,7 +48,7 @@ export class ConnectionOption {
         this.usingSSH = false;
         this.includeDatabases = null;
         this.dbType = DatabaseType.MSSQL;
-        this.encrypt = true;
+        this.encrypt = false;
         this.connectionUrl = "";
         this.global = true;
         this.timezone = "+00:00"

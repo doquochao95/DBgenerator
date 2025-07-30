@@ -97,6 +97,30 @@ export const saveFile = async (file: FileContent): Promise<void> => {
 };
 
 /**
+ * Deletes specific files with path.
+ *
+ * @param {string} path - Path to the file
+ * @param {object} [options] - Options for the deleteFile function
+ * @param {boolean} [options.recursive] - Delete the content recursively if a folder is denoted.
+ * @param {boolean} [options.useTrash] - Use the trash instead of permanently deleting the files.
+ * @example
+ * await deleteFiles('src');
+ *
+ * @returns {Promise<void>} - No return value
+ */
+export const deleteFile = async (
+  path: string,
+  options?: { recursive?: boolean; useTrash?: boolean },
+): Promise<void> => {
+  if (fs.existsSync(path)) {
+    fs.access(path, (err: any) => {
+      if (err) throw err;
+      workspace.fs.delete(Uri.file(path), options);
+    });
+  }
+};
+
+/**
  * Deletes ALL files contained in the supplied path.
  *
  * @param {string} path - Path to the directory

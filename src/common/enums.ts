@@ -8,7 +8,7 @@ export enum SQLSchemaType {
     PROCEDURE = "PROCEDURE", FUNCTION = "FUNCTION", TABLE = "BASE TABLE", VIEW = "VIEW"
 }
 export enum GenType {
-    All = "Generate all tables", Specific = "Choose tables for generation"
+    Database = "Database tables/views", Procedure = "Stored procedures (limited support)", Repository = "Repository files with SDCORES's EF supporting function"
 }
 
 export enum pcStatus {
@@ -18,7 +18,9 @@ export enum pcStatus {
 export enum Confirm {
     YES = "YES", NO = "NO"
 }
-
+export enum Mode {
+    Generate = "Generate", Regenerate = "Regenerate"
+}
 export const enum Types {
     DECIMAL = 0x00, // aka DECIMAL (http://dev.mysql.com/doc/refman/5.0/en/precision-math-decimal-changes.html)
     TINY = 0x01, // aka TINYINT, 1 byte
