@@ -8,31 +8,35 @@ export function getUpdateDbContextFile(path: string, config: DbGeneratorConfig) 
     const folder: string = config.dbContextFolder
     const filename = `${config.dbContextFileName}.cs`;
     const filename_Temp = `${config.dbContextFileName}_temp.cs`;
-    const regexNamespace = new RegExp(`namespace.*${folder}\\s*{`) 
+    const regexNamespace = new RegExp(`namespace.*${folder}\\s*{`)
+    const regexNewline = /\r\n    /gi
     const regexNoSpace = /\s+/g
     const regexDbset = /(?=public)/
     const regexEntity = /(?=modelBuilder)/
     const regex = /public.*?(public\svirtual\sDbSet.*?)protected\soverride\svoid\sOnModelCreating\(.*?\)\s*{.*?(modelBuilder.*?)OnModelCreatingPartial\(.*?\);.*?\(.*?\);\s*}/s
     let content: string = readFileContent(`${path}\\${folder}\\${filename}`);
     let content_Temp: string = readFileContent(`${path}\\${folder}\\${filename_Temp}`);
-    const seperateDbset = regexNamespace.test(content) ? '\r\n\r\n        ':'\r\n\r\n    '
-    const seperateEntity = regexNamespace.test(content) ? '\r\n\r\n            ':'\r\n\r\n        '
+    const onNamespaceBracket = regexNamespace.test(content)
+    const seperateDbset = onNamespaceBracket ? '\r\n\r\n        ' : '\r\n\r\n    '
+    const seperateEntity = onNamespaceBracket ? '\r\n\r\n            ' : '\r\n\r\n        '
     const contentRegex = regex.exec(content)
     const contentRegex_Temp = regex.exec(content_Temp)
     if (contentRegex == null || contentRegex[1] == null || contentRegex[2] == null) return null
-    let contentDbset_Temp : string[] = []
+    let contentDbset_Temp: string[] = []
     let contentEntity_Temp: string[] = []
-    const tempDbset = contentRegex_Temp[1].split(regexDbset).map(x=>x.trim())
-    const tempEntity = contentRegex_Temp[2].split(regexEntity).map(x=>x.trim())
+    const tempDbset = contentRegex_Temp[1].split(regexDbset).map(x => x.trim())
+    const tempEntity = contentRegex_Temp[2].split(regexEntity).map(x => x.trim())
     const contentRegexDbset_NoSpace = contentRegex[1].replace(regexNoSpace, '')
     const contentRegexEntity_NoSpace = contentRegex[2].replace(regexNoSpace, '')
-    tempDbset.forEach(x => {
+    tempDbset.forEach((x: string) => {
         if (contentRegexDbset_NoSpace.indexOf(x.replace(regexNoSpace, '')) == -1)
             contentDbset_Temp.push(`${x}${seperateDbset}`)
     })
-    tempEntity.forEach(x => {
-        if (contentRegexEntity_NoSpace.indexOf(x.replace(regexNoSpace, '')) == -1)
+    tempEntity.forEach((x: string) => {
+        if (contentRegexEntity_NoSpace.indexOf(x.replace(regexNoSpace, '')) == -1) {
+            x = onNamespaceBracket ? x.replace(regexNewline, '\r\n        ') : x
             contentEntity_Temp.push(`${x}${seperateEntity}`)
+        }
     })
     content = content.replace(contentRegex[1], `${contentRegex[1]}${contentDbset_Temp.join('')}`)
     content = content.replace(contentRegex[2], `${contentRegex[2]}${contentEntity_Temp.join('')}`)
