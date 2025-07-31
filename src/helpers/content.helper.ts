@@ -45,16 +45,20 @@ export function getUpdateDbContextFile(path: string, config: DbGeneratorConfig) 
 export function getUpdateStoreProcedureDbContextFile(path: string, storeList: StoreProcedureInfoModel[], config: DbGeneratorConfig) {
     const folder: string = config.dbContextFolder
     const filename = `${config.dbContextFileName}.cs`;
+    const regexNamespace = new RegExp(`namespace.*${folder}\\s*{`)
     const regex = /public.*?(public\svirtual\sDbSet.*?)\s*protected\soverride\svoid\sOnModelCreating\(.*?\)\s*{.*?(modelBuilder.*?)\s*OnModelCreatingPartial\(.*?\);.*?\(.*?\);\s*}/s
     let content: string = readFileContent(`${path}\\${folder}\\${filename}`);
+    const onNamespaceBracket = regexNamespace.test(content)
+    const seperateDbset = onNamespaceBracket ? '\r\n\r\n        ' : '\r\n\r\n    '
+    const seperateEntity = onNamespaceBracket ? '\r\n\r\n            ' : '\r\n\r\n        '
     const contentRegex = regex.exec(content)
     let dbsetContents: string[] = []
     let modelbuilderContents: string[] = []
     storeList.forEach(x => {
         if (contentRegex[1].indexOf(x.storeName) == -1)
-            dbsetContents.push(`public virtual DbSet<${x.storeName}> ${x.storeName} { get; set; }\r\n\r\n    `)
+            dbsetContents.push(`public virtual DbSet<${x.storeName}> ${x.storeName} { get; set; }${seperateDbset}`)
         if (contentRegex[2].indexOf(x.storeName) == -1)
-            modelbuilderContents.push(`modelBuilder.Entity<${x.storeName}>().HasNoKey();\r\n\r\n        `)
+            modelbuilderContents.push(`modelBuilder.Entity<${x.storeName}>().HasNoKey();${seperateEntity}`)
     })
     let dbsetIndex: number = content.indexOf('protected override void OnModelCreating(ModelBuilder modelBuilder)');
     content = [content.slice(0, dbsetIndex), dbsetContents.join(''), content.slice(dbsetIndex)].join("");
