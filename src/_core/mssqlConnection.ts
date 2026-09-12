@@ -5,6 +5,24 @@ import { FieldInfo } from "../common/interfaces";
 import { pcStatus } from "../common/enums";
 import { ConnectionOption } from "../common/constants";
 
+const tediousTypeMap: Record<string, string> = {
+    'BITN': 'bit', 'BIT': 'bit',
+    'INTN': 'int', 'INT': 'int', 'INT4': 'int', 'INT8': 'bigint',
+    'BIGINT': 'bigint', 'SMALLINT': 'smallint', 'TINYINT': 'tinyint',
+    'FLT8': 'float', 'FLT4': 'real', 'FLOATN': 'float', 'REAL': 'real',
+    'DECIMALN': 'decimal', 'DECIMAL': 'decimal',
+    'NUMERICN': 'numeric', 'NUMERIC': 'numeric',
+    'MONEYN': 'money', 'MONEY': 'money', 'MONEY4': 'smallmoney',
+    'STRING': 'varchar', 'VARCHAR': 'varchar',
+    'NSTRING': 'nvarchar', 'NVARCHAR': 'nvarchar', 'NVarChar': 'nvarchar',
+    'TEXT': 'text', 'NTEXT': 'ntext', 'XML': 'xml',
+    'DATETIMN': 'datetime', 'DATETIME': 'datetime', 'DATETIME2': 'datetime2',
+    'DATETIME4': 'smalldatetime', 'DATE': 'date', 'TIME': 'time',
+    'TIMESTAMP': 'timestamp', 'UNIQUEIDN': 'uniqueidentifier',
+    'BINARY': 'binary', 'VARBINARY': 'varbinary', 'IMAGE': 'image',
+    'SQL_VARIANT': 'sql_variant'
+};
+
 export class IpoolConnection<T> {
     public actual?: T;
     constructor(public id: number, public status: pcStatus) {
@@ -125,7 +143,7 @@ export class MSSqlConnnection {
                 event.emit("end")
                 if (callback) {
                     if (err) {
-                        callback(err, null)
+                        callback(err, null, multi ? fields : fields[0] || [])
                     } else if (isDML) {
                         callback(null, { affectedRows: datas.length })
                     } else {
@@ -138,9 +156,24 @@ export class MSSqlConnnection {
                 columnCount++;
                 let tempFields = []
                 columns.forEach((column: { colName: any; }) => {
+                    let typeName = ''
+                    try {
+                        const colType = (column as any).type
+                        if (colType) {
+                            if (typeof colType.declaration === 'function') {
+                                typeName = colType.declaration({})
+                            }
+                            if (!typeName) {
+                                const typeId = colType.type || colType.name || ''
+                                typeName = tediousTypeMap[typeId] || typeId.toLowerCase() || ''
+                            }
+                        }
+                    } catch (e) { }
                     tempFields.push({
                         name: column.colName,
-                        orgTable: ((column) as any).tableName
+                        orgTable: ((column) as any).tableName,
+                        typeName: typeName,
+                        isNullable: (column as any).nullable !== false
                     })
                 });
                 fields.push(tempFields)

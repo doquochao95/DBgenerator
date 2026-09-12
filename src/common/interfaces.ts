@@ -41,21 +41,33 @@ export interface CommonModel {
 export interface ColumnInfoModel {
     NAME: string;
     TYPE: string;
+    isNullable?: boolean;
 }
 export interface QuickPickModel {
     id: string
     info: ColumnInfoModel[]
+    params?: ParameterInfoModel[]
     item: QuickPickItem,
 }
 export interface StoreProcedureInfoModel {
     storeName: string
     variables: VariableInfoModel[]
+    parameters: ParameterInfoModel[]
 }
 export interface VariableInfoModel {
     columnName: string
     variableName: string
     sqlType: string
     dataType: string
+    isNullable: boolean
+}
+export interface ParameterInfoModel {
+    name: string
+    typeName: string
+    maxLength: number
+    precision: number
+    scale: number
+    isOutput: boolean
 }
 export interface FieldInfo {
     catalog: string;

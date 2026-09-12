@@ -14983,7 +14983,7 @@ PERFORMANCE OF THIS SOFTWARE.
       type: 'INTN',
       name: 'IntN',
       declaration() {
-        throw new Error('not implemented');
+        return 'int';
       },
       generateTypeInfo() {
         throw new Error('not implemented');
@@ -32495,7 +32495,7 @@ PERFORMANCE OF THIS SOFTWARE.
       type: 'DATETIMN',
       name: 'DateTimeN',
       declaration() {
-        throw new Error('not implemented');
+        return 'datetime';
       },
       generateTypeInfo() {
         throw new Error('not implemented');
@@ -32518,7 +32518,7 @@ PERFORMANCE OF THIS SOFTWARE.
       type: 'FLTN',
       name: 'FloatN',
       declaration() {
-        throw new Error('not implemented');
+        return 'float';
       },
       generateTypeInfo() {
         throw new Error('not implemented');
@@ -32541,7 +32541,7 @@ PERFORMANCE OF THIS SOFTWARE.
       type: 'MONEYN',
       name: 'MoneyN',
       declaration() {
-        throw new Error('not implemented');
+        return 'money';
       },
       generateTypeInfo() {
         throw new Error('not implemented');
@@ -45016,7 +45016,7 @@ PERFORMANCE OF THIS SOFTWARE.
       type: 'BITN',
       name: 'BitN',
       declaration() {
-        throw new Error('not implemented');
+        return 'bit';
       },
       generateTypeInfo() {
         throw new Error('not implemented');
@@ -45038,8 +45038,14 @@ PERFORMANCE OF THIS SOFTWARE.
       id: 106,
       type: 'DECIMALN',
       name: 'DecimalN',
-      declaration() {
-        throw new Error('not implemented');
+      declaration: function (e) {
+        return (
+          'decimal(' +
+          (null != e && null != e.precision ? e.precision : 18) +
+          ', ' +
+          (null != e && null != e.scale ? e.scale : 0) +
+          ')'
+        );
       },
       generateTypeInfo() {
         throw new Error('not implemented');
@@ -45061,8 +45067,14 @@ PERFORMANCE OF THIS SOFTWARE.
       id: 108,
       type: 'NUMERICN',
       name: 'NumericN',
-      declaration() {
-        throw new Error('not implemented');
+      declaration: function (e) {
+        return (
+          'numeric(' +
+          (null != e && null != e.precision ? e.precision : 18) +
+          ', ' +
+          (null != e && null != e.scale ? e.scale : 0) +
+          ')'
+        );
       },
       generateTypeInfo() {
         throw new Error('not implemented');
@@ -74381,7 +74393,7 @@ PERFORMANCE OF THIS SOFTWARE.
       type: 'NULL',
       name: 'Null',
       declaration() {
-        throw new Error('not implemented');
+        return 'sql_variant';
       },
       generateTypeInfo() {
         throw new Error('not implemented');
@@ -75110,7 +75122,7 @@ PERFORMANCE OF THIS SOFTWARE.
       name: 'NText',
       hasTableName: !0,
       declaration() {
-        throw new Error('not implemented');
+        return 'ntext';
       },
       generateTypeInfo() {
         throw new Error('not implemented');
@@ -75595,7 +75607,7 @@ PERFORMANCE OF THIS SOFTWARE.
       type: 'XML',
       name: 'Xml',
       declaration() {
-        throw new Error('not implemented');
+        return 'xml';
       },
       generateTypeInfo() {
         throw new Error('not implemented');
@@ -75893,7 +75905,7 @@ PERFORMANCE OF THIS SOFTWARE.
       type: 'UDTTYPE',
       name: 'UDT',
       declaration() {
-        throw new Error('not implemented');
+        return 'udt';
       },
       generateTypeInfo() {
         throw new Error('not implemented');

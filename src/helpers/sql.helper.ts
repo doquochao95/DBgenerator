@@ -1,8 +1,28 @@
 import { ConnectionOption } from "../common/constants";
-import { ColumnInfoModel, CommonModel, RoutineModel, TableModel } from "../common/interfaces";
+import { ColumnInfoModel, CommonModel, ParameterInfoModel, RoutineModel, TableModel } from "../common/interfaces";
 import { MSSqlConnnection } from "../_core/mssqlConnection";
 import { QueryUnit } from "../_core/queryUnit";
 import { SQLSchemaType } from "../common/enums";
+
+export async function queryStoredProcedureDefinition(connection: ConnectionOption, procedureName: string): Promise<string> {
+  return new Promise(async (resolve, reject) => {
+    const newConnection = new MSSqlConnnection(connection)
+    newConnection.connect(async (err: Error) => {
+      if (err)
+        reject(err)
+      else {
+        const sql = `SELECT OBJECT_DEFINITION(OBJECT_ID('${procedureName}')) AS definition`
+        await QueryUnit.queryPromise<any[]>(newConnection, sql)
+          .then(res => {
+            resolve(res.rows[0]?.definition || '')
+          })
+          .catch(error => {
+            reject(error)
+          })
+      }
+    });
+  });
+}
 
 export async function queryTables(connection: ConnectionOption): Promise<CommonModel[]> {
   return new Promise(async (resolve, reject) => {
@@ -91,23 +111,71 @@ export async function queryStoredProcedures(connection: ConnectionOption): Promi
     });
   });
 }
-export async function queryStoredProceduresInfo(connection: ConnectionOption, procedureName : string): Promise<ColumnInfoModel[]> {
+export async function queryStoredProceduresInfo(connection: ConnectionOption, procedureName: string, params: { name: string, typeName: string }[] = []): Promise<ColumnInfoModel[]> {
+  if (params.length === 0) return []
+  return await queryStoredProcedureInfoViaExecution(connection, procedureName, params)
+}
+export async function queryStoredProceduresParameters(connection: ConnectionOption, procedureName: string): Promise<ParameterInfoModel[]> {
   return new Promise(async (resolve, reject) => {
     const newConnection = new MSSqlConnnection(connection)
     newConnection.connect(async (err: Error) => {
       if (err)
         reject(err)
       else {
-        const sql = `SELECT [NAME] = name, system_type_name as TYPE
-                  FROM sys.dm_exec_describe_first_result_set_for_object ( OBJECT_ID('${procedureName}'), NULL);`
-        await QueryUnit.queryPromise<ColumnInfoModel[]>(newConnection, sql)
+        const sql = `SELECT
+                    p.name AS NAME,
+                    t.name AS TypeName,
+                    p.max_length AS MaxLength,
+                    p.precision AS Precision,
+                    p.scale AS Scale,
+                    p.is_output AS IsOutput
+                  FROM sys.parameters p
+                  INNER JOIN sys.types t ON p.system_type_id = t.system_type_id AND p.user_type_id = t.user_type_id
+                  WHERE p.object_id = OBJECT_ID('${procedureName}')
+                  AND p.name != ''
+                  ORDER BY p.parameter_id`
+        await QueryUnit.queryPromise<any[]>(newConnection, sql)
           .then(res => {
-            const result = res.rows
+            const result = res.rows.map(x => <ParameterInfoModel>{
+              name: x.NAME,
+              typeName: x.typeName,
+              maxLength: x.maxLength,
+              precision: x.precision,
+              scale: x.scale,
+              isOutput: x.isOutput === 1
+            })
             resolve(result)
           }
           ).catch(error => {
-            reject(error)
+            resolve([])
           })
+      }
+    });
+  });
+}
+async function queryStoredProcedureInfoViaExecution(connection: ConnectionOption, procedureName: string, params: { name: string, typeName: string }[]): Promise<ColumnInfoModel[]> {
+  return new Promise(async (resolve, reject) => {
+    const newConnection = new MSSqlConnnection(connection)
+    newConnection.connect(async (err: Error) => {
+      if (err)
+        reject(err)
+      else {
+        const execParams = params.map(p => `${p.name} = NULL`).join(', ')
+        const execStatement = execParams ? `[${procedureName}] ${execParams}` : `[${procedureName}]`
+        const sql = `SET NOCOUNT ON; EXEC ${execStatement}`
+        let capturedFields: any[] = []
+        newConnection.query(sql, (err: any, rows: any, fields: any) => {
+          if (fields && fields.length > 0) {
+            capturedFields = fields
+          }
+          const result: ColumnInfoModel[] = capturedFields
+            .filter((f: any) => f.name)
+            .map((f: any) => ({
+              NAME: f.name,
+              TYPE: f.typeName || 'nvarchar(max)'
+            }))
+          resolve(result)
+        })
       }
     });
   });

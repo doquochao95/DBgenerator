@@ -67,19 +67,17 @@ export function getUpdateStoreProcedureDbContextFile(path: string, storeList: St
     return <FileContent>{ path: path, folder: folder, filename: filename, content: content }
 }
 export function getStoredProcedureModelFile(path: string, store: StoreProcedureInfoModel, config: DbGeneratorConfig) {
-    const variables = store.variables.map(variable =>
-        `[Column("${variable.columnName}", TypeName ="${variable.sqlType}")]\r\n        public ${variable.dataType} ${variable.variableName} { get; set; }`)
+    const variables = (store.variables || []).map(variable =>
+        `public ${variable.dataType} ${variable.variableName} { get; set; }`)
     const root = pathLib.basename(path)
     const folder: string = config.modelFolder
     const name: string = store.storeName
     const filename = `${name}.cs`;
-    const content = `using System.ComponentModel.DataAnnotations.Schema;
-
-namespace ${root}.${folder}
+    const content = `namespace ${root}.${folder}
 {
     public class ${name}
     {
-        ${variables.join('\r\n        ')}
+        ${variables.length > 0 ? variables.join('\r\n        ') : '// No result set columns'}
     }
 }`;
     return <FileContent>{ path: path, folder: folder, filename: filename, content: content }

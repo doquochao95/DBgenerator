@@ -8,7 +8,7 @@ export enum SQLSchemaType {
     PROCEDURE = "PROCEDURE", FUNCTION = "FUNCTION", TABLE = "BASE TABLE", VIEW = "VIEW"
 }
 export enum GenType {
-    Database = "Database tables/views", Procedure = "Stored procedures (limited support)", Repository = "Repository files with SDCORES's EF supporting function"
+    Database = "Database tables/views", Procedure = "Stored procedures", Repository = "Repository files with SDCORES's EF supporting function"
 }
 
 export enum pcStatus {
@@ -55,6 +55,7 @@ export const enum Types {
     GEOMETRY = 0xff, // aka GEOMETRY
 }
 export enum SqlStringDataTypes {
+    char = "string",
     nchar = "string",
     ntext = "string",
     nvarchar = "string",
@@ -80,7 +81,6 @@ export enum SqlOtherDataTypes {
     smalldatetime = "DateTime",
     time = "TimeSpan",
 
-    char = "char",
     binary = "byte[]",
     bit = "bool",
     filestream = "byte[]",

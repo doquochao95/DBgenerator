@@ -89,7 +89,6 @@ export const pickManyItems = async (
         let selectedItems: QuickPickModel[] = items
           .filter(x => quickPick.selectedItems
             .some(y => (y.label === x.item.label)))
-        selectedItems = selectedItems.filter(x => x.info.length > 0)
         quickPick.selectedItems = selectedItems.map(x => x.item)
       });
       quickPick.onDidHide(() => {
@@ -184,3 +183,19 @@ export const showError = async (message: string): Promise<void> => {
 export const showWarning = async (message: string): Promise<void> => {
   window.showWarningMessage(message);
 };
+export const confirmWithMessage = async (
+  message: string,
+  placeHolder: string
+): Promise<boolean> => {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      const items: QuickPickItem[] = [
+        { label: Confirm.YES, description: message },
+        { label: Confirm.NO, description: message }
+      ]
+      window.showQuickPick(items, { placeHolder }).then((res) => {
+        resolve(res?.label === Confirm.YES)
+      })
+    }, 1000);
+  });
+}
