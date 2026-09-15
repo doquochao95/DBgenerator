@@ -46,7 +46,7 @@
             "default": "DBContext",
             "description": "DB context file name"
           },
-          "dbgenerator.dbContextFolder": {
+          "dbgenerator.dataFolder": {
             "type": "string",
             "default": "Data",
             "description": "DB context folder"
@@ -88,13 +88,18 @@
           },
           "dbgenerator.configurationsFolder": {
             "type": "string",
-            "default": "Data/Configurations",
+            "default": "Configurations",
             "description": "Configurations folder inside Infrastructure (Clean Architecture)"
           },
           "dbgenerator.cleanArchDbContextFileName": {
             "type": "string",
             "default": "AppDBContext",
             "description": "DB context file name for Clean Architecture"
+          },
+          "dbgenerator.cleanArchDbConfigurationsFileName": {
+            "type": "string",
+            "default": "AppDBConfigurations",
+            "description": "Configurations file name for Clean Architecture"
           }
         }
       }

@@ -7,7 +7,7 @@ import { DbGeneratorConfig } from '../common/interfaces';
  */
 export function getConfiguration(): DbGeneratorConfig {
   const dbContextFileName = vscode.workspace.getConfiguration('dbgenerator').get("dbContextFileName") as string;
-  const dbContextFolder = vscode.workspace.getConfiguration('dbgenerator').get("dbContextFolder") as string;
+  const dataFolder = vscode.workspace.getConfiguration('dbgenerator').get("dataFolder") as string;
   const modelFolder = vscode.workspace.getConfiguration('dbgenerator').get("modelFolder") as string;
   const appSettingFileName = vscode.workspace.getConfiguration('dbgenerator').get("appSettingFileName") as string;
   const repoFileName = vscode.workspace.getConfiguration('dbgenerator').get("repoFileName") as string;
@@ -16,11 +16,12 @@ export function getConfiguration(): DbGeneratorConfig {
   const domainFolder = vscode.workspace.getConfiguration('dbgenerator').get("domainFolder") as string || 'Domain';
   const entityFolder = vscode.workspace.getConfiguration('dbgenerator').get("entityFolder") as string || 'Entities';
   const infrastructureFolder = vscode.workspace.getConfiguration('dbgenerator').get("infrastructureFolder") as string || 'Infrastructure';
-  const configurationsFolder = vscode.workspace.getConfiguration('dbgenerator').get("configurationsFolder") as string || 'Data/Configurations';
+  const configurationsFolder = vscode.workspace.getConfiguration('dbgenerator').get("configurationsFolder") as string || 'Configurations';
   const cleanArchDbContextFileName = vscode.workspace.getConfiguration('dbgenerator').get("cleanArchDbContextFileName") as string || 'AppDBContext';
+  const cleanArchDbConfigurationsFileName = vscode.workspace.getConfiguration('dbgenerator').get("cleanArchDbConfigurationsFileName") as string || 'AppDBConfigurations';
   return {
     dbContextFileName,
-    dbContextFolder,
+    dataFolder,
     modelFolder,
     appSettingFileName,
     repoFileName,
@@ -29,6 +30,7 @@ export function getConfiguration(): DbGeneratorConfig {
     entityFolder,
     infrastructureFolder,
     configurationsFolder,
-    cleanArchDbContextFileName
+    cleanArchDbContextFileName,
+    cleanArchDbConfigurationsFileName
   };
 }

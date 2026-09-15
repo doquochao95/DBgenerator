@@ -1,14 +1,13 @@
-import * as vscode from 'vscode';
 import * as pathLib from 'path';
 import glob = require('glob');
-import { ColumnInfoModel, CommonModel, Connection, DbGeneratorConfig, FileContent, PackageDetail, ParameterInfoModel, Project, QuickPickModel, StoreProcedureInfoModel, TableModel, VariableInfoModel } from '../common/interfaces';
+import { ColumnInfoModel, CommonModel, Connection, DbGeneratorConfig, FileContent, ConfigModel, PackageDetail, ParameterInfoModel, Project, QuickPickModel, StoreProcedureInfoModel, TableModel, VariableInfoModel } from '../common/interfaces';
 import { pickManyItems, pickSingleItem, showError, showMessage, confirm } from '../helpers/dialog.helper';
 import { GenType, Mode, SqlOtherDataTypes, SQLSchemaType, SqlStringDataTypes, ArchitectureType } from '../common/enums';
 import { ConnectionOption, EFCoreDesign, SDCores } from '../common/constants';
 import { exists, findProjects, readFileContent, runCommand, saveFile, createTempDir, copyDirSync, removeDirSync, writeFileContent } from '../helpers';
 import { getPackages } from '../helpers/xml.helper';
 import { queryStoredProcedures, queryStoredProceduresInfo, queryStoredProceduresParameters, queryStoredProcedureDefinition, queryTables, queryViews } from '../helpers/sql.helper';
-import { getUpdateStoreProcedureDbContextFile, getIRepoFile, getStoredProcedureModelFile, getRepoFile, getUpdateDbContextFile, geUpdateRepoFile, getCleanArchitectureEntityFile, getCleanArchitectureConfigurationsSnippet, transformEntityForCleanArch, transformEntityForNTier, readAllCsFiles, generateCleanArchDbContext, extractEntityBlocks } from '../helpers/content.helper';
+import { getUpdateStoreProcedureDbContextFile, getIRepoFile, getStoredProcedureModelFile, getRepoFile, updateDbContextFile, geUpdateRepoFile, getCleanArchitectureEntityFile, getCleanArchitectureConfigurationsSnippet, transformEntityForCleanArch, transformEntityForNTier, readAllCsFiles, extractEntityBlocks, updateAppDBConfigurations, createAppDBContextFile, createAppDBConfigurations, createDbContextFile } from '../helpers/content.helper';
 import { FileType, Progress, ProgressLocation, QuickPickItem, QuickPickItemKind, Uri, window, workspace, WorkspaceFolder } from 'vscode';
 
 export class GeneratorController {
@@ -153,10 +152,7 @@ export class GeneratorController {
                         const selectedViewNames = selectedTables.filter(x => views.some(v => v.id === x.id)).map(x => x.id)
                         if (this._genTypes.some(x => x.id == GenType.Database)) {
                             progress.report({ message: `Building database...` });
-                            const tempDir = await this.regenerate(selectedTables.map(x => x.id), selectedViewNames)
-                            progress.report({ message: `Regenerating ${this.config.dbContextFileName} ...` });
-                            if (!await this.regenDbContext(selectedTables.map(x => x.id), selectedViewNames, tempDir ?? undefined)) return
-                            if (tempDir) removeDirSync(tempDir)
+                            if (!await this.regenerate(selectedTables.map(x => x.id), selectedViewNames)) return
                         }
                         if (this._genTypes.some(x => x.id == GenType.Repository)) {
                             progress.report({ message: `Creating repository files...` });
@@ -297,64 +293,26 @@ export class GeneratorController {
         const entityFiles = readAllCsFiles(`${tempDir}/Entities`)
         return { tempDir, entityFiles }
     }
-    private async regenerate(selectedTables: string[], viewNames: string[] = []): Promise<string | null> {
-        if (!await this.checkPackage(EFCoreDesign))
-            return null
-        const tableString = selectedTables.join(` --table `)
-        const isCleanArch = this._architectureType === ArchitectureType.CleanArchitecture
-        const folders = isCleanArch ? this.getCleanArchFolders() : null
-        const contextName = isCleanArch ? this.config.cleanArchDbContextFileName : this.config.dbContextFileName
-        const result = await this.scaffoldToTemp(tableString, contextName)
-        if (!result) return null
-        const { tempDir, entityFiles } = result
-        const projectName = isCleanArch ? this.getBaseProjectName() : ''
-        // Step 1: Process files in temp (temp is the source for modifications)
-        if (isCleanArch) {
-            for (const [name, content] of entityFiles) {
-                if (!viewNames.includes(name) && !selectedTables.includes(name)) continue
-                const transformed = transformEntityForCleanArch(content, name, projectName)
-                const tempEntityPath = `${tempDir}/Entities/${name}.cs`
-                writeFileContent(tempEntityPath, transformed)
-            }
-        } else {
-            const rootNamespace = pathLib.basename(this._path)
-            for (const [name, content] of entityFiles) {
-                if (!viewNames.includes(name) && !selectedTables.includes(name)) continue
-                const transformed = transformEntityForNTier(content, name, rootNamespace)
-                const tempEntityPath = `${tempDir}/Entities/${name}.cs`
-                writeFileContent(tempEntityPath, transformed)
-            }
-        }
-        // Step 2: Copy from temp to target (temp is the source)
-        if (isCleanArch) {
-            const tempEntitiesDir = `${tempDir}/Entities`
-            const targetEntitiesDir = `${folders!.root}/${folders!.domainFolder}/${folders!.entityFolder}`
-            copyDirSync(tempEntitiesDir, targetEntitiesDir)
-        } else {
-            const tempEntitiesDir = `${tempDir}/Entities`
-            const targetEntitiesDir = `${this._path}/${this.config.modelFolder}`
-            copyDirSync(tempEntitiesDir, targetEntitiesDir)
-        }
-        return tempDir
-    }
-    private async generate(selectedTables: string[], viewNames: string[] = []) {
+    private async regenerate(selectedTables: string[], viewNames: string[] = []): Promise<boolean> {
         if (!await this.checkPackage(EFCoreDesign))
             return false
         const tableString = selectedTables.join(` --table `)
         const isCleanArch = this._architectureType === ArchitectureType.CleanArchitecture
-        const folders = isCleanArch ? this.getCleanArchFolders() : null
-        const contextName = isCleanArch ? this.config.cleanArchDbContextFileName : this.config.dbContextFileName
-        const result = await this.scaffoldToTemp(tableString, contextName)
+        const config = isCleanArch ? this.getCleanArchConfigs() : this.getNTierConfigs()
+        const contextFile = `${config.dataPath}\\${config.dbContextFileName}.cs`
+        if (!await exists(contextFile)) {
+            showError(`File ${config.dbContextFileName}.cs does not exist in ${config.dataPath}, use generate instead`);
+            return false
+        }
+        const result = await this.scaffoldToTemp(tableString, 'DBcontext')
         if (!result) return false
         const { tempDir, entityFiles } = result
         try {
-            const projectName = isCleanArch ? this.getBaseProjectName() : ''
             const tableConfigs: string[] = []
             const viewConfigs: string[] = []
-            // Step 1: Process files in temp (temp is the source for modifications)
+            // Step 1: Process files in temp
             if (isCleanArch) {
-                // Extract entity blocks from scaffolded context BEFORE overwriting
-                const scaffoldedContextPath = `${tempDir}/Context/${contextName}.cs`
+                const scaffoldedContextPath = `${tempDir}/Context/DBcontext.cs`
                 if (await exists(scaffoldedContextPath)) {
                     const scaffoldedContext = readFileContent(scaffoldedContextPath)
                     const entityBlocks = extractEntityBlocks(scaffoldedContext)
@@ -368,13 +326,100 @@ export class GeneratorController {
                 }
                 for (const [name, content] of entityFiles) {
                     if (!viewNames.includes(name) && !selectedTables.includes(name)) continue
-                    const transformed = transformEntityForCleanArch(content, name, projectName)
+                    const transformed = transformEntityForCleanArch(config, content)
                     const tempEntityPath = `${tempDir}/Entities/${name}.cs`
                     writeFileContent(tempEntityPath, transformed)
                 }
-                const dbContextContent = generateCleanArchDbContext(projectName, contextName)
-                writeFileContent(`${tempDir}/Context/${contextName}.cs`, dbContextContent)
             } else {
+                const scaffoldedContextPath = `${tempDir}/Context/DBcontext.cs`
+                if (await exists(scaffoldedContextPath)) {
+                    const scaffoldedContext = readFileContent(scaffoldedContextPath)
+                    const entityBlocks = extractEntityBlocks(scaffoldedContext)
+                    for (const { entityName, block } of entityBlocks) {
+                        if (viewNames.includes(entityName)) {
+                            viewConfigs.push(block)
+                        } else if (selectedTables.includes(entityName)) {
+                            tableConfigs.push(block)
+                        }
+                    }
+                }
+                const rootNamespace = pathLib.basename(this._path)
+                for (const [name, content] of entityFiles) {
+                    if (!viewNames.includes(name) && !selectedTables.includes(name)) continue
+                    const transformed = transformEntityForNTier(content, name, rootNamespace)
+                    const tempEntityPath = `${tempDir}/Entities/${name}.cs`
+                    writeFileContent(tempEntityPath, transformed)
+                }
+            }
+            // Step 2: Copy from temp to target + regen context
+            if (isCleanArch) {
+                copyDirSync(`${tempDir}/Entities`, `${config.entityPath}`)
+                const configurationsContent = updateAppDBConfigurations(config, tableConfigs, viewConfigs)
+                if (configurationsContent == null) {
+                    showError(`File ${this.config.cleanArchDbConfigurationsFileName}.cs does not exist`);
+                    return false
+                }
+                await saveFile(configurationsContent)
+            } else {
+                copyDirSync(`${tempDir}/Entities`, `${config.entityPath}`)
+                const dbContextContent = updateDbContextFile(config, tableConfigs, viewConfigs)
+                if (dbContextContent == null) {
+                    showError(`File ${config.dbContextFileName}.cs is not in right format, please check or use generate instead`);
+                    return false
+                }
+                await saveFile(dbContextContent);
+            }
+        } finally {
+            removeDirSync(tempDir)
+        }
+        return true
+    }
+    private async generate(selectedTables: string[], viewNames: string[] = []) {
+        if (!await this.checkPackage(EFCoreDesign))
+            return false
+        const tableString = selectedTables.join(` --table `)
+        const isCleanArch = this._architectureType === ArchitectureType.CleanArchitecture
+        const config = isCleanArch ? this.getCleanArchConfigs() : this.getNTierConfigs()
+        const result = await this.scaffoldToTemp(tableString, 'DBcontext')
+        if (!result) return false
+        const { tempDir, entityFiles } = result
+        try {
+            const tableConfigs: string[] = []
+            const viewConfigs: string[] = []
+            // Step 1: Process files in temp (temp is the source for modifications)
+            if (isCleanArch) {
+                // Extract entity blocks from scaffolded context BEFORE overwriting
+                const scaffoldedContextPath = `${tempDir}/Context/DBcontext.cs`
+                if (await exists(scaffoldedContextPath)) {
+                    const scaffoldedContext = readFileContent(scaffoldedContextPath)
+                    const entityBlocks = extractEntityBlocks(scaffoldedContext)
+                    for (const { entityName, block } of entityBlocks) {
+                        if (viewNames.includes(entityName)) {
+                            viewConfigs.push(block)
+                        } else if (selectedTables.includes(entityName)) {
+                            tableConfigs.push(block)
+                        }
+                    }
+                }
+                for (const [name, content] of entityFiles) {
+                    if (!viewNames.includes(name) && !selectedTables.includes(name)) continue
+                    const transformed = transformEntityForCleanArch(config, content)
+                    const tempEntityPath = `${tempDir}/Entities/${name}.cs`
+                    writeFileContent(tempEntityPath, transformed)
+                }
+            } else {
+                const scaffoldedContextPath = `${tempDir}/Context/DBcontext.cs`
+                if (await exists(scaffoldedContextPath)) {
+                    const scaffoldedContext = readFileContent(scaffoldedContextPath)
+                    const entityBlocks = extractEntityBlocks(scaffoldedContext)
+                    for (const { entityName, block } of entityBlocks) {
+                        if (viewNames.includes(entityName)) {
+                            viewConfigs.push(block)
+                        } else if (selectedTables.includes(entityName)) {
+                            tableConfigs.push(block)
+                        }
+                    }
+                }
                 const rootNamespace = pathLib.basename(this._path)
                 for (const [name, content] of entityFiles) {
                     if (!viewNames.includes(name) && !selectedTables.includes(name)) continue
@@ -387,23 +432,20 @@ export class GeneratorController {
             // Step 2: Copy from temp to target (temp is the source)
             if (isCleanArch) {
                 const tempEntitiesDir = `${tempDir}/Entities`
-                const targetEntitiesDir = `${folders!.root}/${folders!.domainFolder}/${folders!.entityFolder}`
-                copyDirSync(tempEntitiesDir, targetEntitiesDir)
+                copyDirSync(tempEntitiesDir, config.entityPath)
 
-                const tempContextDir = `${tempDir}/Context`
-                const targetContextDir = `${folders!.root}/${folders!.infrastructureFolder}/Data`
-                copyDirSync(tempContextDir, targetContextDir)
+                const dbContextContent = createAppDBContextFile(config)
+                await saveFile(dbContextContent)
 
                 // Generate AppDBConfigurations.cs from extracted entity blocks
-                const tableEntries = tableConfigs.map(s => `            ${s.trim()}`).join('\r\n\r\n')
-                const viewEntries = viewConfigs.map(s => `            ${s.trim()}`).join('\r\n\r\n')
-                const configurationsContent = `using Microsoft.EntityFrameworkCore;\r\nusing ${projectName}.Domain.Entities;\r\n\r\nnamespace ${projectName}.Infrastructure.Data.Configurations;\r\n\r\npublic static class AppDBConfigurations\r\n{\r\n    public static void Configure(ModelBuilder modelBuilder)\r\n    {\r\n        #region Tables\r\n${tableEntries || '        '}\r\n        #endregion\r\n\r\n        #region Views\r\n${viewEntries || '        '}\r\n        #endregion\r\n\r\n        #region Stored Procedures\r\n        #endregion\r\n    }\r\n}`
-                await saveFile(<FileContent>{ path: folders!.root, folder: `${folders!.infrastructureFolder}/${folders!.configurationsFolder}`, filename: 'AppDBConfigurations.cs', content: configurationsContent })
+                const configurationsContent = createAppDBConfigurations(config, tableConfigs, viewConfigs)
+                await saveFile(configurationsContent)
             } else {
-                // NTier: copy entity files and context from temp to target
                 const tempEntitiesDir = `${tempDir}/Entities`
-                const targetEntitiesDir = `${this._path}/${this.config.modelFolder}`
-                copyDirSync(tempEntitiesDir, targetEntitiesDir)
+                copyDirSync(tempEntitiesDir, config.entityFolder)
+
+                const dbContextContent = createDbContextFile(config, tableConfigs, viewConfigs)
+                await saveFile(dbContextContent)
             }
         } finally {
             removeDirSync(tempDir)
@@ -447,18 +489,17 @@ export class GeneratorController {
     }
     private async genStoreProcedure(selectedProcedures: QuickPickModel[], progress: Progress<{ message?: string }>) {
         progress.report({ message: `Validating project files...` });
-        if (this._architectureType === ArchitectureType.CleanArchitecture) {
-            const folders = this.getCleanArchFolders()
-            const folder: string = `${folders.infrastructureFolder}/Data`
-            const filename: string = `${this.config.cleanArchDbContextFileName}.cs`;
-            if (!await exists(`${folders.root}\\${folder}\\${filename}`)) {
-                showError(`File ${filename} does not exist in ${folder}, please generate database first`);
+        const isCleanArch = this._architectureType === ArchitectureType.CleanArchitecture
+        const config = isCleanArch ? this.getCleanArchConfigs() : this.getNTierConfigs()
+        if (isCleanArch) {
+            const filename: string = `${this.config.cleanArchDbConfigurationsFileName}.cs`;
+            if (!await exists(`${config.configurationsPath}\\${filename}`)) {
+                showError(`File ${filename} does not exist, please generate database first`);
                 return false
             }
         } else {
-            const folder: string = this.config.dbContextFolder
             const filename: string = `${this.config.dbContextFileName}.cs`;
-            if (!await exists(`${this._path}\\${folder}\\${filename}`)) {
+            if (!await exists(`${config.dataPath}\\${filename}`)) {
                 showError(`File ${filename} does not exist, please generate database first`);
                 return false
             }
@@ -518,18 +559,15 @@ export class GeneratorController {
                 })
             }
         })
-        if (this._architectureType === ArchitectureType.CleanArchitecture) {
-            const folders = this.getCleanArchFolders()
-            const projectName = this.getBaseProjectName()
+        if (isCleanArch) {
             try {
                 // Generate entity files directly to target (no temp needed - code-generated, not scaffolded)
                 progress.report({ message: `Generating entity files...` });
                 for (const store of storeList) {
-                    const rawContent = getCleanArchitectureEntityFile(this._path, store, this.config, projectName)
-                    const transformed = transformEntityForCleanArch(rawContent.content, store.storeName, projectName)
+                    const rawContent = getCleanArchitectureEntityFile(config, store)
+                    const transformed = transformEntityForCleanArch(config, rawContent.content)
                     await saveFile(<FileContent>{
-                        path: folders.root,
-                        folder: `${folders.domainFolder}/${folders.entityFolder}`,
+                        path: config.entityPath,
                         filename: `${store.storeName}.cs`,
                         content: transformed
                     })
@@ -538,15 +576,14 @@ export class GeneratorController {
                 showError(`Error generating entity files: ${error.message}`);
                 return false
             }
-            progress.report({ message: `Updating AppDBConfigurations...` });
+            progress.report({ message: `Updating ${this.config.cleanArchDbConfigurationsFileName}...` });
             try {
-                const configurationsFolder = `${folders.infrastructureFolder}/${folders.configurationsFolder}`
-                const configurationsFile = `${configurationsFolder}/AppDBConfigurations.cs`
-                if (!await exists(`${folders.root}\\${configurationsFile}`)) {
-                    showError(`File AppDBConfigurations.cs does not exist`);
+                const configurationsFile = `${config.dbConfigurationFileName}.cs`
+                if (!await exists(`${config.configurationsPath}\\${configurationsFile}`)) {
+                    showError(`File ${this.config.cleanArchDbConfigurationsFileName}.cs does not exist`);
                     return false
                 }
-                let content = readFileContent(`${folders.root}\\${configurationsFile}`)
+                let content = readFileContent(`${config.configurationsPath}\\${configurationsFile}`)
                 const storeNames = storeList.map(s => s.storeName)
                 const newEntries = getCleanArchitectureConfigurationsSnippet(storeNames)
                 const insertBefore = '#endregion'
@@ -555,7 +592,7 @@ export class GeneratorController {
                 if (lastSpRegionIndex !== -1 && lastRegionEnd !== -1) {
                     content = content.slice(0, lastRegionEnd) + '\r\n' + newEntries + '\r\n        ' + content.slice(lastRegionEnd)
                 }
-                await saveFile(<FileContent>{ path: folders.root, folder: configurationsFolder, filename: 'AppDBConfigurations.cs', content: content })
+                await saveFile(<FileContent>{ path: config.configurationsPath, filename: configurationsFile, content: content })
             } catch (error: any) {
                 showError(`Error updating AppDBConfigurations: ${error.message}`);
                 return false
@@ -566,87 +603,18 @@ export class GeneratorController {
                 // Generate model files directly to target
                 progress.report({ message: `Generating model files...` });
                 for (const store of storeList) {
-                    const modelContent = getStoredProcedureModelFile(this._path, store, this.config)
+                    const modelContent = getStoredProcedureModelFile(config, store)
                     await saveFile(modelContent)
                 }
                 // Update DbContext directly (reads existing, adds new SP DbSets + HasNoKey)
                 progress.report({ message: `Updating DbContext...` });
-                const dbContextContent = getUpdateStoreProcedureDbContextFile(this._path, storeList, this.config)
+                const dbContextContent = getUpdateStoreProcedureDbContextFile(config, storeList)
                 await saveFile(dbContextContent);
             } catch (error: any) {
                 showError(`Error generating files: ${error.message}`);
                 return false
             }
             showMessage(`Generated ${storeList.length} model(s) and updated DbContext successfully`);
-        }
-        return true
-    }
-    private async regenDbContext(tableNames: string[] = [], viewNames: string[] = [], tempDir?: string) {
-        const isCleanArch = this._architectureType === ArchitectureType.CleanArchitecture
-        const folders = isCleanArch ? this.getCleanArchFolders() : null
-        const basePath = isCleanArch ? folders!.root : this._path
-        const folder: string = isCleanArch ? `${folders!.infrastructureFolder}/Data` : this.config.dbContextFolder
-        const contextName = isCleanArch ? this.config.cleanArchDbContextFileName : this.config.dbContextFileName
-        const filename: string = `${contextName}.cs`;
-        if (!await exists(`${basePath}\\${folder}\\${filename}`)) {
-            showError(`File ${filename} does not exist in ${folder}, use generate instead`);
-            return false
-        }
-        if (!isCleanArch) {
-            const tempContextPath = tempDir ? `${tempDir}/Context/${contextName}.cs` : undefined
-            const dbContextContent = getUpdateDbContextFile(this._path, this.config, undefined, undefined, tempContextPath)
-            if (dbContextContent == null) {
-                showError(`File ${filename} is not in right format, please check or use generate instead`);
-                return false
-            }
-            await saveFile(dbContextContent);
-        }
-        if (isCleanArch && (tableNames.length > 0 || viewNames.length > 0)) {
-            const configurationsFolder = `${folders!.infrastructureFolder}/${folders!.configurationsFolder}`
-            const configurationsFile = `${configurationsFolder}/AppDBConfigurations.cs`
-            const configPath = `${basePath}\\${configurationsFile}`
-            if (await exists(configPath) && tempDir) {
-                let content = readFileContent(configPath)
-                // Read entity configs from scaffolded context in temp
-                const tempContextPath = `${tempDir}/Context/${contextName}.cs`
-                if (await exists(tempContextPath)) {
-                    const tempContext = readFileContent(tempContextPath)
-                    const entityBlocks = extractEntityBlocks(tempContext)
-                    const tableConfigs: string[] = []
-                    const viewConfigs: string[] = []
-                    for (const { entityName, block } of entityBlocks) {
-                        if (viewNames.includes(entityName)) {
-                            viewConfigs.push(block)
-                        } else if (tableNames.includes(entityName)) {
-                            tableConfigs.push(block)
-                        }
-                    }
-                    // Replace Tables region
-                    const tablesRegionIndex = content.indexOf('#region Tables')
-                    const tablesRegionEnd = content.indexOf('#endregion', tablesRegionIndex)
-                    if (tablesRegionIndex !== -1 && tablesRegionEnd !== -1) {
-                        const newEntries = tableConfigs.map(s => `            ${s.trim()}`).join('\r\n\r\n')
-                        content = content.slice(0, tablesRegionEnd) + '\r\n\r\n' + newEntries + '\r\n        ' + content.slice(tablesRegionEnd)
-                    }
-                    // Replace Views region
-                    const viewsRegionIndex = content.indexOf('#region Views')
-                    if (viewsRegionIndex !== -1) {
-                        const viewsRegionEnd = content.indexOf('#endregion', viewsRegionIndex)
-                        if (viewsRegionEnd !== -1) {
-                            const newEntries = viewConfigs.map(s => `            ${s.trim()}`).join('\r\n\r\n')
-                            content = content.slice(0, viewsRegionEnd) + '\r\n\r\n' + newEntries + '\r\n        ' + content.slice(viewsRegionEnd)
-                        }
-                    } else {
-                        const spRegionIndex = content.indexOf('#region Stored Procedures')
-                        if (spRegionIndex !== -1 && viewConfigs.length > 0) {
-                            const viewEntries = viewConfigs.map(s => `            ${s.trim()}`).join('\r\n\r\n')
-                            const viewsRegion = `\r\n\r\n        #region Views\r\n${viewEntries}\r\n        #endregion\r\n`
-                            content = content.slice(0, spRegionIndex) + viewsRegion + content.slice(spRegionIndex)
-                        }
-                    }
-                }
-                await saveFile(<FileContent>{ path: basePath, folder: configurationsFolder, filename: 'AppDBConfigurations.cs', content: content })
-            }
         }
         return true
     }
@@ -748,19 +716,36 @@ export class GeneratorController {
         }
         return projectName
     }
-    private getCleanArchRoot(): string {
-        return pathLib.dirname(this._path)
-    }
-    private getCleanArchFolders() {
+    private getCleanArchConfigs() {
+        const root = pathLib.dirname(this._path)
         const baseName = this.getBaseProjectName()
-        const root = this.getCleanArchRoot()
-        return {
-            root,
-            domainFolder: `${baseName}.Domain`,
-            entityFolder: 'Entities',
-            infrastructureFolder: `${baseName}.Infrastructure`,
-            configurationsFolder: 'Data/Configurations',
-            apiFolder: `${baseName}.Api`
+        return <ConfigModel>{
+            root: root,
+            projectName: baseName,
+            dbContextFileName: this.config.cleanArchDbContextFileName,
+            dbConfigurationFileName: this.config.cleanArchDbConfigurationsFileName,
+
+            entityPath: `${root}\\${baseName}.${this.config.domainFolder}\\${this.config.entityFolder}`,
+            dataPath: `${root}\\${baseName}.${this.config.infrastructureFolder}\\${this.config.dataFolder}`,
+            configurationsPath: `${root}\\${baseName}.${this.config.infrastructureFolder}\\${this.config.dataFolder}\\${this.config.configurationsFolder}`,
+
+            entityFolder: this.config.entityFolder,
+            dataFolder: this.config.dataFolder,
+            domainFolder: this.config.domainFolder,
+            infrastructureFolder: this.config.infrastructureFolder,
+            configurationsFolder: this.config.configurationsFolder
+        }
+    }
+    private getNTierConfigs() {
+        return <ConfigModel>{
+            root: pathLib.dirname(this._path),
+            dbContextFileName: this.config.dbContextFileName,
+
+            entityPath: `${this._path}\\${this.config.modelFolder}`,
+            dataPath: `${this._path}\\${this.config.dataFolder}`,
+
+            entityFolder: this.config.modelFolder,
+            dataFolder: this.config.dataFolder,
         }
     }
     //#endregion
@@ -819,7 +804,7 @@ export class GeneratorController {
             showError('Not pick item yet')
         return picked?.id as ArchitectureType | undefined
     }
-    
+
     private async selectConnectionString(connections: Connection[]) {
         const quickPickItems: QuickPickModel[] = connections.map(item =>
             <QuickPickModel>{

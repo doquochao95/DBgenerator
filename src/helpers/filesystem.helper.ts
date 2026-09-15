@@ -77,7 +77,7 @@ export const directoryMap = async (
  */
 export const saveFile = async (file: FileContent): Promise<void> => {
   if (workspace.workspaceFolders) {
-    const rootPath = join(file.path, file.folder)
+    const rootPath = join(file.path)
     if (!fs.existsSync(rootPath))
       fs.mkdirSync(rootPath, { recursive: true });
     const filePath = join(rootPath, file.filename);

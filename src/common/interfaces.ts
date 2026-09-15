@@ -1,16 +1,31 @@
 import { QuickPickItem } from "vscode";
 import { Types } from "./enums";
+export interface ConfigModel {
+    root: string,
+    projectName: string,
 
+    entityFolder: string,
+    dataFolder: string,
+    infrastructureFolder: string,
+    configurationsFolder: string,
+    domainFolder: string;
+
+    entityPath: string,
+    dataPath: string,
+    configurationsPath: string,
+
+    dbContextFileName:string;
+    dbConfigurationFileName:string;
+}
 export interface FileContent {
     path: string
-    folder: string
     name: string
     filename: string
     content: string
 }
 export interface DbGeneratorConfig {
     dbContextFileName: string;
-    dbContextFolder: string;
+    dataFolder: string;
     modelFolder: string;
     appSettingFileName: string;
     repoFileName: string;
@@ -21,6 +36,7 @@ export interface DbGeneratorConfig {
     infrastructureFolder: string;
     configurationsFolder: string;
     cleanArchDbContextFileName: string;
+    cleanArchDbConfigurationsFileName: string;
 }
 export interface Connection {
     name: string;

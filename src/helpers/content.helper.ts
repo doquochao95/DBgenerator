@@ -1,49 +1,39 @@
-import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as pathLib from 'path';
-import { DbGeneratorConfig, FileContent, StoreProcedureInfoModel } from '../common/interfaces';
+import { DbGeneratorConfig, FileContent, ConfigModel, StoreProcedureInfoModel } from '../common/interfaces';
 import { readFileContent } from './filesystem.helper';
-import { Path } from 'glob';
 
-export function getUpdateDbContextFile(path: string, config: DbGeneratorConfig, overrideFolder?: string, overrideContextName?: string, tempContextPath?: string) {
-    const folder: string = overrideFolder || config.dbContextFolder
-    const contextName: string = overrideContextName || config.dbContextFileName
-    const filename = `${contextName}.cs`;
-    let content: string = readFileContent(`${path}\\${folder}\\${filename}`);
-    let content_Temp: string = tempContextPath
-        ? readFileContent(tempContextPath)
-        : readFileContent(`${path}\\${folder}\\${filename}`)
-
-    const dbSetRegex = /public\s+virtual\s+DbSet<[^>]+>[^;]+;/g
-    const newDbSets = content_Temp.match(dbSetRegex) || []
-
-    const entityBlockRegex = /modelBuilder\.Entity<[^>]+>\(entity\s*=>\s*\{[\s\S]*?\}\);/g
-    const newEntities = content_Temp.match(entityBlockRegex) || []
-
-    if (newDbSets.length > 0) {
+export function updateDbContextFile(config: ConfigModel, tableConfigs: string[], viewConfigs: string[]): FileContent | null {
+    const fileName = `${config.dbContextFileName}.cs`
+    if (!fs.existsSync(`${config.dataPath}\\${fileName}`)) return null
+    let content: string = readFileContent(`${config.dataPath}\\${fileName}`)
+    const allEntityBlocks = [...tableConfigs, ...viewConfigs]
+    const entityNames = allEntityBlocks.map(block => {
+        const match = block.match(/modelBuilder\.Entity<([^>]+)>/)
+        return match ? match[1] : null
+    }).filter((n): n is string => n !== null)
+    const dbSets = entityNames.map(name => `public virtual DbSet<${name}> ${name} { get; set; }`)
+    if (dbSets.length > 0) {
         const insertIndex = content.indexOf('protected override void OnModelCreating')
         if (insertIndex !== -1) {
-            const dbsetStr = newDbSets.map(s => `        ${s.trim()}`).join('\r\n\r\n        ')
-            content = content.slice(0, insertIndex) + dbsetStr + '\r\n\r\n        ' + content.slice(insertIndex)
+            const dbsetStr = dbSets.map(s => `${s.trim()}`).join('\r\n\r\n    ')
+            content = content.slice(0, insertIndex) + dbsetStr + '\r\n\r\n    ' + content.slice(insertIndex)
         }
     }
-
-    if (newEntities.length > 0) {
+    if (allEntityBlocks.length > 0) {
         const insertIndex = content.indexOf('OnModelCreatingPartial(modelBuilder);')
         if (insertIndex !== -1) {
-            const entityStr = newEntities.map(s => `            ${s.trim()}`).join('\r\n\r\n            ')
-            content = content.slice(0, insertIndex) + entityStr + '\r\n\r\n            ' + content.slice(insertIndex)
+            const entityStr = allEntityBlocks.map(s => `${s.trim()}`).join('\r\n\r\n        ')
+            content = content.slice(0, insertIndex) + entityStr + '\r\n\r\n        ' + content.slice(insertIndex)
         }
     }
-
-    return <FileContent>{ path: path, folder: folder, filename: filename, content: content }
+    return <FileContent>{ path: config.dataPath, filename: fileName, content }
 }
-export function getUpdateStoreProcedureDbContextFile(path: string, storeList: StoreProcedureInfoModel[], config: DbGeneratorConfig) {
-    const folder: string = config.dbContextFolder
+export function getUpdateStoreProcedureDbContextFile(config: ConfigModel, storeList: StoreProcedureInfoModel[]) {
     const filename = `${config.dbContextFileName}.cs`;
-    const regexNamespace = new RegExp(`namespace.*${folder}\\s*{`)
+    const regexNamespace = new RegExp(`namespace.*${config.dataFolder}\\s*{`)
     const regex = /public.*?(public\svirtual\sDbSet.*?)\s*protected\soverride\svoid\sOnModelCreating\(.*?\)\s*{.*?(modelBuilder.*?)\s*OnModelCreatingPartial\(.*?\);.*?\(.*?\);\s*}/s
-    let content: string = readFileContent(`${path}\\${folder}\\${filename}`);
+    let content: string = readFileContent(`${config.dataPath}\\${filename}`);
     const onNamespaceBracket = regexNamespace.test(content)
     const seperateDbset = onNamespaceBracket ? '\r\n\r\n        ' : '\r\n\r\n    '
     const seperateEntity = onNamespaceBracket ? '\r\n\r\n            ' : '\r\n\r\n        '
@@ -60,41 +50,36 @@ export function getUpdateStoreProcedureDbContextFile(path: string, storeList: St
     content = [content.slice(0, dbsetIndex), dbsetContents.join(''), content.slice(dbsetIndex)].join("");
     let modelbuilderIndex: number = content.indexOf('OnModelCreatingPartial(modelBuilder);');
     content = [content.slice(0, modelbuilderIndex), modelbuilderContents.join(''), content.slice(modelbuilderIndex)].join("");
-    return <FileContent>{ path: path, folder: folder, filename: filename, content: content }
+    return <FileContent>{ path: config.dataPath, filename: filename, content: content }
 }
-export function getStoredProcedureModelFile(path: string, store: StoreProcedureInfoModel, config: DbGeneratorConfig) {
+export function getStoredProcedureModelFile(config: ConfigModel, store: StoreProcedureInfoModel) {
     const variables = (store.variables || []).map(variable => {
         const dataType = variable.dataType.endsWith('?') ? variable.dataType : `${variable.dataType}?`
         return `public ${dataType} ${variable.variableName} { get; set; }`
     })
-    const root = pathLib.basename(path)
-    const folder: string = config.modelFolder
-    const name: string = store.storeName
-    const filename = `${name}.cs`;
-    const content = `namespace ${root}.${folder}
+    const filename = `${store.storeName}.cs`;
+    const content = `namespace ${config.root}.${config.entityFolder}
 {
-    public class ${name}
+    public class ${store.storeName}
     {
         ${variables.length > 0 ? variables.join('\r\n        ') : '// No result set columns'}
     }
 }`;
-    return <FileContent>{ path: path, folder: folder, filename: filename, content: content }
+    return <FileContent>{ path: config.entityPath, filename: filename, content: content }
 }
-export function getCleanArchitectureEntityFile(path: string, store: StoreProcedureInfoModel, config: DbGeneratorConfig, projectName: string) {
+export function getCleanArchitectureEntityFile(config: ConfigModel, store: StoreProcedureInfoModel,) {
     const variables = (store.variables || []).map(variable => {
         const dataType = variable.dataType.endsWith('?') ? variable.dataType : `${variable.dataType}?`
         return `    public ${dataType} ${variable.variableName} { get; set; }`
     })
-    const name: string = store.storeName
-    const filename = `${name}.cs`;
-    const folder = `${config.domainFolder}/${config.entityFolder}`
-    const content = `namespace ${projectName}.${config.domainFolder}.${config.entityFolder};
+    const filename = `${store.storeName}.cs`;
+    const content = `namespace ${config.projectName}.${config.domainFolder}.${config.entityFolder};
 
-public class ${name}
+public class ${store.storeName}
 {
 ${variables.length > 0 ? variables.join('\r\n') : '    // No result set columns'}
 }`;
-    return <FileContent>{ path: path, folder: folder, filename: filename, content: content }
+    return <FileContent>{ path: config.entityPath, filename: filename, content: content }
 }
 export function getCleanArchitectureConfigurationsSnippet(storeNames: string[]): string {
     const snippets = storeNames.map(name =>
@@ -104,13 +89,79 @@ export function getCleanArchitectureConfigurationsSnippet(storeNames: string[]):
         });`)
     return snippets.join('\r\n\r\n')
 }
-export function generateCleanArchDbContext(projectName: string, contextName: string): string {
-    return `using Microsoft.EntityFrameworkCore;
+export function createAppDBContextFile(config: ConfigModel): FileContent {
+    const filename = `${config.dbContextFileName}.cs`;
+    const content = `using Microsoft.EntityFrameworkCore;
 
-namespace ${projectName}.Infrastructure.Data;
+namespace ${config.projectName}.${config.infrastructureFolder}.${config.dataFolder};
 
-public partial class ${contextName}(DbContextOptions<${contextName}> options) : DbContext(options) { }
+public partial class ${config.dbContextFileName}(DbContextOptions<${config.dbContextFileName}> options) : DbContext(options) { }
 `
+    return <FileContent>{ path: config.dataPath, filename: filename, content }
+}
+export function createDbContextFile(config: ConfigModel, tableConfigs: string[], viewConfigs: string[]): FileContent {
+    const filename = `${config.dbContextFileName}.cs`;
+    const allEntityBlocks = [...tableConfigs, ...viewConfigs]
+    const entityNames = allEntityBlocks.map(block => {
+        const match = block.match(/modelBuilder\.Entity<([^>]+)>/)
+        return match ? match[1] : null
+    }).filter((n): n is string => n !== null)
+    const dbSets = entityNames.map(name => `public virtual DbSet<${name}> ${name} { get; set; }`)
+    const entityBlockStr = allEntityBlocks.map(s => `${s.trim()}`).join('\r\n\r\n        ')
+    const content = `using System;
+using System.Collections.Generic;
+using API.${config.entityFolder};
+using Microsoft.EntityFrameworkCore;
+
+namespace API.${config.dataFolder};
+
+public partial class ${config.dbContextFileName} : DbContext
+{
+    public ${config.dbContextFileName}(DbContextOptions<${config.dbContextFileName}> options)
+        : base(options)
+    {
+    }
+
+    ${dbSets.join('\r\n\r\n    ')}
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        ${entityBlockStr}
+
+        OnModelCreatingPartial(modelBuilder);
+    }
+
+    partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
+}
+`
+    return <FileContent>{ path: config.dataPath, filename, content }
+}
+export function createAppDBConfigurations(config: ConfigModel, tableConfigs: string[], viewConfigs: string[]): FileContent | null {
+    const filename = `${config.dbConfigurationFileName}.cs`;
+    const tableEntries = tableConfigs.map(s => `        ${s.trim()}`).join('\r\n\r\n')
+    const viewEntries = viewConfigs.map(s => `        ${s.trim()}`).join('\r\n\r\n')
+    const content = `using Microsoft.EntityFrameworkCore;
+using ${config.projectName}.${config.domainFolder}.${config.entityFolder};
+
+namespace ${config.projectName}.${config.infrastructureFolder}.${config.dataFolder}.${config.configurationsFolder};
+
+public static class ${config.dbConfigurationFileName}
+{
+    public static void Configure(ModelBuilder modelBuilder)
+    {
+        #region Tables
+${tableEntries || '        '}
+        #endregion
+
+        #region Views
+${viewEntries || '        '}
+        #endregion
+
+        #region Stored Procedures
+        #endregion
+    }
+}`
+    return <FileContent>{ path: config.configurationsPath, filename: filename, content }
 }
 export function geUpdateRepoFile(path: string, tableNames: string[], config: DbGeneratorConfig) {
     const folder: string = config.repoFolder
@@ -142,8 +193,8 @@ export function geUpdateRepoFile(path: string, tableNames: string[], config: DbG
     content = content.replace(contentRegex[4], `${contentRegex[4]}\n        ${repo_variable.join('\n        ')}`)
 
     return [
-        <FileContent>{ path: path, folder: folder, filename: ifilename, content: icontent },
-        <FileContent>{ path: path, folder: folder, filename: filename, content: content }
+        <FileContent>{ path: path, filename: ifilename, content: icontent },
+        <FileContent>{ path: path, filename: filename, content: content }
     ]
 }
 export function getIRepoFile(path: string, tableNames: string[], config: DbGeneratorConfig) {
@@ -165,7 +216,7 @@ namespace ${root}.${folder}
         ${irepo.join('\n        ')}
     }
 }`;
-    return <FileContent>{ path: path, folder: folder, filename: filename, content: content }
+    return <FileContent>{ path: path, filename: filename, content: content }
 }
 
 export function getRepoFile(path: string, tableNames: string[], config: DbGeneratorConfig) {
@@ -175,7 +226,7 @@ export function getRepoFile(path: string, tableNames: string[], config: DbGenera
     const folder: string = config.repoFolder
     const name: string = config.repoFileName
     const filename = `${name}.cs`;
-    const content = `using ${root}.${config.dbContextFolder};
+    const content = `using ${root}.${config.dataFolder};
 using ${root}.${config.modelFolder};
 using Microsoft.EntityFrameworkCore.Storage;
 using SDCores;
@@ -200,9 +251,9 @@ namespace ${root}.${folder}
         }
     }
 }`;
-    return <FileContent>{ path: path, folder: folder, filename: filename, content: content }
+    return <FileContent>{ path: path, filename: filename, content: content }
 }
-export function transformEntityForCleanArch(content: string, entityName: string, projectName?: string): string {
+export function transformEntityForCleanArch(config: ConfigModel, content: string): string {
     const lines = content.split(/\r?\n/)
     const newLines: string[] = []
     let hasUsingData = false
@@ -216,8 +267,8 @@ export function transformEntityForCleanArch(content: string, entityName: string,
         } else if (line.includes('using System.ComponentModel.DataAnnotations;')) {
             hasUsingData = true
             newLines.push(line)
-        } else if (line.match(/^namespace\s+/) && projectName) {
-            newLines.push(`namespace ${projectName}.Domain.Entities;`)
+        } else if (line.match(/^namespace\s+/) && config.projectName) {
+            newLines.push(`namespace ${config.projectName}.${config.domainFolder}.${config.entityFolder};`)
         } else if (line.match(/public\s+\w+\??\s+\w+\s*\{\s*get;\s*set;\s*\}/)) {
             const transformed = transformProperty(line)
             newLines.push(transformed)
@@ -255,6 +306,32 @@ function transformProperty(line: string): string {
     } else {
         return `    public ${typeName}? ${propName} { get; set; }`
     }
+}
+export function updateAppDBConfigurations(config: ConfigModel, tableConfigs: string[], viewConfigs: string[]): FileContent | null {
+    const fileName = `${config.dbConfigurationFileName}.cs`
+    if (!fs.existsSync(`${config.configurationsPath}\\${fileName}`)) return null
+    let content = readFileContent(`${config.configurationsPath}\\${fileName}`)
+    if (tableConfigs.length > 0) {
+        const tablesRegionIndex = content.indexOf('#region Tables')
+        if (tablesRegionIndex !== -1) {
+            const tablesRegionEnd = content.indexOf('#endregion', tablesRegionIndex)
+            if (tablesRegionEnd !== -1) {
+                const newEntries = tableConfigs.map(s => `        ${s.trim()}`).join('\r\n\r\n')
+                content = content.slice(0, tablesRegionEnd) + '\r\n' + newEntries + '\r\n        ' + content.slice(tablesRegionEnd)
+            }
+        }
+    }
+    if (viewConfigs.length > 0) {
+        const viewsRegionIndex = content.indexOf('#region Views')
+        if (viewsRegionIndex !== -1) {
+            const viewsRegionEnd = content.indexOf('#endregion', viewsRegionIndex)
+            if (viewsRegionEnd !== -1) {
+                const newEntries = viewConfigs.map(s => `        ${s.trim()}`).join('\r\n\r\n')
+                content = content.slice(0, viewsRegionEnd) + '\r\n' + newEntries + '\r\n        ' + content.slice(viewsRegionEnd)
+            }
+        }
+    }
+    return <FileContent>{ path: config.configurationsPath, filename: fileName, content }
 }
 export function extractEntityBlocks(contextContent: string): { entityName: string, block: string }[] {
     const results: { entityName: string, block: string }[] = []
