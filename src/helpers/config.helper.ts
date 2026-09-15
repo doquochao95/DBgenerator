@@ -12,12 +12,23 @@ export function getConfiguration(): DbGeneratorConfig {
   const appSettingFileName = vscode.workspace.getConfiguration('dbgenerator').get("appSettingFileName") as string;
   const repoFileName = vscode.workspace.getConfiguration('dbgenerator').get("repoFileName") as string;
   const repoFolder = vscode.workspace.getConfiguration('dbgenerator').get("repoFolder") as string;
+  // Clean Architecture
+  const domainFolder = vscode.workspace.getConfiguration('dbgenerator').get("domainFolder") as string || 'Domain';
+  const entityFolder = vscode.workspace.getConfiguration('dbgenerator').get("entityFolder") as string || 'Entities';
+  const infrastructureFolder = vscode.workspace.getConfiguration('dbgenerator').get("infrastructureFolder") as string || 'Infrastructure';
+  const configurationsFolder = vscode.workspace.getConfiguration('dbgenerator').get("configurationsFolder") as string || 'Data/Configurations';
+  const cleanArchDbContextFileName = vscode.workspace.getConfiguration('dbgenerator').get("cleanArchDbContextFileName") as string || 'AppDBContext';
   return {
     dbContextFileName,
     dbContextFolder,
     modelFolder,
     appSettingFileName,
     repoFileName,
-    repoFolder
+    repoFolder,
+    domainFolder,
+    entityFolder,
+    infrastructureFolder,
+    configurationsFolder,
+    cleanArchDbContextFileName
   };
 }

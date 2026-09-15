@@ -10,6 +10,10 @@ export enum SQLSchemaType {
 export enum GenType {
     Database = "Database tables/views", Procedure = "Stored procedures", Repository = "Repository files with SDCORES's EF supporting function"
 }
+export enum ArchitectureType {
+    NTier = "N-tier (Data + Model)",
+    CleanArchitecture = "Clean Architecture (Domain + Infrastructure)"
+}
 
 export enum pcStatus {
     PEENDING = "PEENDING", FREE = "FREE", BUSY = "BUSY"

@@ -15,6 +15,12 @@ export interface DbGeneratorConfig {
     appSettingFileName: string;
     repoFileName: string;
     repoFolder: string;
+    // Clean Architecture
+    domainFolder: string;
+    entityFolder: string;
+    infrastructureFolder: string;
+    configurationsFolder: string;
+    cleanArchDbContextFileName: string;
 }
 export interface Connection {
     name: string;
@@ -59,7 +65,6 @@ export interface VariableInfoModel {
     variableName: string
     sqlType: string
     dataType: string
-    isNullable: boolean
 }
 export interface ParameterInfoModel {
     name: string

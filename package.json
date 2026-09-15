@@ -70,6 +70,31 @@
             "type": "string",
             "default": "_Repositories",
             "description": "Repository folder"
+          },
+          "dbgenerator.domainFolder": {
+            "type": "string",
+            "default": "Domain",
+            "description": "Domain folder (Clean Architecture)"
+          },
+          "dbgenerator.entityFolder": {
+            "type": "string",
+            "default": "Entities",
+            "description": "Entity folder inside Domain (Clean Architecture)"
+          },
+          "dbgenerator.infrastructureFolder": {
+            "type": "string",
+            "default": "Infrastructure",
+            "description": "Infrastructure folder (Clean Architecture)"
+          },
+          "dbgenerator.configurationsFolder": {
+            "type": "string",
+            "default": "Data/Configurations",
+            "description": "Configurations folder inside Infrastructure (Clean Architecture)"
+          },
+          "dbgenerator.cleanArchDbContextFileName": {
+            "type": "string",
+            "default": "AppDBContext",
+            "description": "DB context file name for Clean Architecture"
           }
         }
       }

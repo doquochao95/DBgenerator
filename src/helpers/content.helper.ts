@@ -1,45 +1,41 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import * as pathLib from 'path';
 import { DbGeneratorConfig, FileContent, StoreProcedureInfoModel } from '../common/interfaces';
 import { readFileContent } from './filesystem.helper';
 import { Path } from 'glob';
 
-export function getUpdateDbContextFile(path: string, config: DbGeneratorConfig) {
-    const folder: string = config.dbContextFolder
-    const filename = `${config.dbContextFileName}.cs`;
-    const filename_Temp = `${config.dbContextFileName}_temp.cs`;
-    const regexNamespace = new RegExp(`namespace.*${folder}\\s*{`)
-    const regexNewline = /\r\n    /gi
-    const regexNoSpace = /\s+/g
-    const regexDbset = /(?=public)/
-    const regexEntity = /(?=modelBuilder)/
-    const regex = /public.*?(public\svirtual\sDbSet.*?)protected\soverride\svoid\sOnModelCreating\(.*?\)\s*{.*?(modelBuilder.*?)OnModelCreatingPartial\(.*?\);.*?\(.*?\);\s*}/s
+export function getUpdateDbContextFile(path: string, config: DbGeneratorConfig, overrideFolder?: string, overrideContextName?: string, tempContextPath?: string) {
+    const folder: string = overrideFolder || config.dbContextFolder
+    const contextName: string = overrideContextName || config.dbContextFileName
+    const filename = `${contextName}.cs`;
     let content: string = readFileContent(`${path}\\${folder}\\${filename}`);
-    let content_Temp: string = readFileContent(`${path}\\${folder}\\${filename_Temp}`);
-    const onNamespaceBracket = regexNamespace.test(content)
-    const seperateDbset = onNamespaceBracket ? '\r\n\r\n        ' : '\r\n\r\n    '
-    const seperateEntity = onNamespaceBracket ? '\r\n\r\n            ' : '\r\n\r\n        '
-    const contentRegex = regex.exec(content)
-    const contentRegex_Temp = regex.exec(content_Temp)
-    if (contentRegex == null || contentRegex[1] == null || contentRegex[2] == null) return null
-    let contentDbset_Temp: string[] = []
-    let contentEntity_Temp: string[] = []
-    const tempDbset = contentRegex_Temp[1].split(regexDbset).map(x => x.trim())
-    const tempEntity = contentRegex_Temp[2].split(regexEntity).map(x => x.trim())
-    const contentRegexDbset_NoSpace = contentRegex[1].replace(regexNoSpace, '')
-    const contentRegexEntity_NoSpace = contentRegex[2].replace(regexNoSpace, '')
-    tempDbset.forEach((x: string) => {
-        if (contentRegexDbset_NoSpace.indexOf(x.replace(regexNoSpace, '')) == -1)
-            contentDbset_Temp.push(`${x}${seperateDbset}`)
-    })
-    tempEntity.forEach((x: string) => {
-        if (contentRegexEntity_NoSpace.indexOf(x.replace(regexNoSpace, '')) == -1) {
-            x = onNamespaceBracket ? x.replace(regexNewline, '\r\n        ') : x
-            contentEntity_Temp.push(`${x}${seperateEntity}`)
+    let content_Temp: string = tempContextPath
+        ? readFileContent(tempContextPath)
+        : readFileContent(`${path}\\${folder}\\${filename}`)
+
+    const dbSetRegex = /public\s+virtual\s+DbSet<[^>]+>[^;]+;/g
+    const newDbSets = content_Temp.match(dbSetRegex) || []
+
+    const entityBlockRegex = /modelBuilder\.Entity<[^>]+>\(entity\s*=>\s*\{[\s\S]*?\}\);/g
+    const newEntities = content_Temp.match(entityBlockRegex) || []
+
+    if (newDbSets.length > 0) {
+        const insertIndex = content.indexOf('protected override void OnModelCreating')
+        if (insertIndex !== -1) {
+            const dbsetStr = newDbSets.map(s => `        ${s.trim()}`).join('\r\n\r\n        ')
+            content = content.slice(0, insertIndex) + dbsetStr + '\r\n\r\n        ' + content.slice(insertIndex)
         }
-    })
-    content = content.replace(contentRegex[1], `${contentRegex[1]}${contentDbset_Temp.join('')}`)
-    content = content.replace(contentRegex[2], `${contentRegex[2]}${contentEntity_Temp.join('')}`)
+    }
+
+    if (newEntities.length > 0) {
+        const insertIndex = content.indexOf('OnModelCreatingPartial(modelBuilder);')
+        if (insertIndex !== -1) {
+            const entityStr = newEntities.map(s => `            ${s.trim()}`).join('\r\n\r\n            ')
+            content = content.slice(0, insertIndex) + entityStr + '\r\n\r\n            ' + content.slice(insertIndex)
+        }
+    }
+
     return <FileContent>{ path: path, folder: folder, filename: filename, content: content }
 }
 export function getUpdateStoreProcedureDbContextFile(path: string, storeList: StoreProcedureInfoModel[], config: DbGeneratorConfig) {
@@ -67,8 +63,10 @@ export function getUpdateStoreProcedureDbContextFile(path: string, storeList: St
     return <FileContent>{ path: path, folder: folder, filename: filename, content: content }
 }
 export function getStoredProcedureModelFile(path: string, store: StoreProcedureInfoModel, config: DbGeneratorConfig) {
-    const variables = (store.variables || []).map(variable =>
-        `public ${variable.dataType} ${variable.variableName} { get; set; }`)
+    const variables = (store.variables || []).map(variable => {
+        const dataType = variable.dataType.endsWith('?') ? variable.dataType : `${variable.dataType}?`
+        return `public ${dataType} ${variable.variableName} { get; set; }`
+    })
     const root = pathLib.basename(path)
     const folder: string = config.modelFolder
     const name: string = store.storeName
@@ -81,6 +79,38 @@ export function getStoredProcedureModelFile(path: string, store: StoreProcedureI
     }
 }`;
     return <FileContent>{ path: path, folder: folder, filename: filename, content: content }
+}
+export function getCleanArchitectureEntityFile(path: string, store: StoreProcedureInfoModel, config: DbGeneratorConfig, projectName: string) {
+    const variables = (store.variables || []).map(variable => {
+        const dataType = variable.dataType.endsWith('?') ? variable.dataType : `${variable.dataType}?`
+        return `    public ${dataType} ${variable.variableName} { get; set; }`
+    })
+    const name: string = store.storeName
+    const filename = `${name}.cs`;
+    const folder = `${config.domainFolder}/${config.entityFolder}`
+    const content = `namespace ${projectName}.${config.domainFolder}.${config.entityFolder};
+
+public class ${name}
+{
+${variables.length > 0 ? variables.join('\r\n') : '    // No result set columns'}
+}`;
+    return <FileContent>{ path: path, folder: folder, filename: filename, content: content }
+}
+export function getCleanArchitectureConfigurationsSnippet(storeNames: string[]): string {
+    const snippets = storeNames.map(name =>
+        `        modelBuilder.Entity<${name}>(entity =>
+        {
+            entity.HasNoKey();
+        });`)
+    return snippets.join('\r\n\r\n')
+}
+export function generateCleanArchDbContext(projectName: string, contextName: string): string {
+    return `using Microsoft.EntityFrameworkCore;
+
+namespace ${projectName}.Infrastructure.Data;
+
+public partial class ${contextName}(DbContextOptions<${contextName}> options) : DbContext(options) { }
+`
 }
 export function geUpdateRepoFile(path: string, tableNames: string[], config: DbGeneratorConfig) {
     const folder: string = config.repoFolder
@@ -171,4 +201,74 @@ namespace ${root}.${folder}
     }
 }`;
     return <FileContent>{ path: path, folder: folder, filename: filename, content: content }
+}
+export function transformEntityForCleanArch(content: string, entityName: string, projectName?: string): string {
+    const lines = content.split(/\r?\n/)
+    const newLines: string[] = []
+    let hasUsingData = false
+    for (const line of lines) {
+        if (line.includes('[Table(')) {
+            continue
+        } else if (line.includes('[Column(')) {
+            continue
+        } else if (line.includes('using System.ComponentModel.DataAnnotations.Schema;')) {
+            continue
+        } else if (line.includes('using System.ComponentModel.DataAnnotations;')) {
+            hasUsingData = true
+            newLines.push(line)
+        } else if (line.match(/^namespace\s+/) && projectName) {
+            newLines.push(`namespace ${projectName}.Domain.Entities;`)
+        } else if (line.match(/public\s+\w+\??\s+\w+\s*\{\s*get;\s*set;\s*\}/)) {
+            const transformed = transformProperty(line)
+            newLines.push(transformed)
+        } else {
+            newLines.push(line)
+        }
+    }
+    return newLines.join('\r\n')
+}
+export function transformEntityForNTier(content: string, entityName: string, rootNamespace?: string): string {
+    if (!rootNamespace) return content
+    const lines = content.split(/\r?\n/)
+    const newLines: string[] = []
+    for (const line of lines) {
+        if (line.match(/^namespace\s+/)) {
+            newLines.push(`namespace ${rootNamespace}.Models;`)
+        } else {
+            newLines.push(line)
+        }
+    }
+    return newLines.join('\r\n')
+}
+function transformProperty(line: string): string {
+    const match = line.match(/public\s+(\w+)(\?)?\s+(\w+)\s*\{\s*get;\s*set;\s*\}/)
+    if (!match) return line
+    const typeName = match[1]
+    const isNullable = match[2] === '?'
+    const propName = match[3]
+    const valueTypes = ['int', 'long', 'short', 'byte', 'decimal', 'double', 'float', 'bool', 'DateTime', 'DateTimeOffset', 'TimeSpan', 'Guid']
+    const isValueType = valueTypes.includes(typeName)
+    if (isValueType && !isNullable) {
+        return `    public ${typeName} ${propName} { get; set; }`
+    } else if (!isValueType && !isNullable) {
+        return `    public required ${typeName} ${propName} { get; set; }`
+    } else {
+        return `    public ${typeName}? ${propName} { get; set; }`
+    }
+}
+export function readAllCsFiles(dirPath: string): Map<string, string> {
+    const result = new Map<string, string>()
+    try {
+        const files = fs.readdirSync(dirPath)
+        for (const file of files) {
+            if (file.endsWith('.cs')) {
+                const name = file.replace('.cs', '')
+                const content = readFileContent(`${dirPath}\\${file}`)
+                if (content) {
+                    result.set(name, content)
+                }
+            }
+        }
+    } catch (e) { }
+    return result
 }

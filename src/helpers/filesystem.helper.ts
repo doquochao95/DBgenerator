@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import glob = require('glob');
 import { dirname, join } from 'path';
 import { FilePermission, FileStat, Uri, WorkspaceFolder, window, workspace } from 'vscode';
@@ -322,3 +323,25 @@ export const exists = async (path: string): Promise<boolean> => {
 export const isDirectory = async (path: string): Promise<boolean> => {
   return (await workspace.fs.stat(Uri.file(path))).type === 2;
 };
+
+export function createTempDir(): string {
+  return fs.mkdtempSync(join(os.tmpdir(), 'dbgenerator-'));
+}
+
+export function writeFileContent(filePath: string, content: string): void {
+  const dir = dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(filePath, content, 'utf8');
+}
+
+export function copyDirSync(src: string, dest: string) {
+  fs.cpSync(src, dest, { recursive: true });
+}
+
+export function removeDirSync(path: string) {
+  if (fs.existsSync(path)) {
+    fs.rmSync(path, { recursive: true, force: true });
+  }
+}
