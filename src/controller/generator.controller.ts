@@ -8,7 +8,7 @@ import { ConnectionOption, EFCoreDesign, SDCores } from '../common/constants';
 import { exists, findProjects, readFileContent, runCommand, saveFile, createTempDir, copyDirSync, removeDirSync, writeFileContent } from '../helpers';
 import { getPackages } from '../helpers/xml.helper';
 import { queryStoredProcedures, queryStoredProceduresInfo, queryStoredProceduresParameters, queryStoredProcedureDefinition, queryTables, queryViews } from '../helpers/sql.helper';
-import { getUpdateStoreProcedureDbContextFile, getIRepoFile, getStoredProcedureModelFile, getRepoFile, getUpdateDbContextFile, geUpdateRepoFile, getCleanArchitectureEntityFile, getCleanArchitectureConfigurationsSnippet, transformEntityForCleanArch, transformEntityForNTier, readAllCsFiles, generateCleanArchDbContext } from '../helpers/content.helper';
+import { getUpdateStoreProcedureDbContextFile, getIRepoFile, getStoredProcedureModelFile, getRepoFile, getUpdateDbContextFile, geUpdateRepoFile, getCleanArchitectureEntityFile, getCleanArchitectureConfigurationsSnippet, transformEntityForCleanArch, transformEntityForNTier, readAllCsFiles, generateCleanArchDbContext, extractEntityBlocks } from '../helpers/content.helper';
 import { FileType, Progress, ProgressLocation, QuickPickItem, QuickPickItemKind, Uri, window, workspace, WorkspaceFolder } from 'vscode';
 
 export class GeneratorController {
@@ -349,8 +349,23 @@ export class GeneratorController {
         const { tempDir, entityFiles } = result
         try {
             const projectName = isCleanArch ? this.getBaseProjectName() : ''
+            const tableConfigs: string[] = []
+            const viewConfigs: string[] = []
             // Step 1: Process files in temp (temp is the source for modifications)
             if (isCleanArch) {
+                // Extract entity blocks from scaffolded context BEFORE overwriting
+                const scaffoldedContextPath = `${tempDir}/Context/${contextName}.cs`
+                if (await exists(scaffoldedContextPath)) {
+                    const scaffoldedContext = readFileContent(scaffoldedContextPath)
+                    const entityBlocks = extractEntityBlocks(scaffoldedContext)
+                    for (const { entityName, block } of entityBlocks) {
+                        if (viewNames.includes(entityName)) {
+                            viewConfigs.push(block)
+                        } else if (selectedTables.includes(entityName)) {
+                            tableConfigs.push(block)
+                        }
+                    }
+                }
                 for (const [name, content] of entityFiles) {
                     if (!viewNames.includes(name) && !selectedTables.includes(name)) continue
                     const transformed = transformEntityForCleanArch(content, name, projectName)
@@ -379,25 +394,7 @@ export class GeneratorController {
                 const targetContextDir = `${folders!.root}/${folders!.infrastructureFolder}/Data`
                 copyDirSync(tempContextDir, targetContextDir)
 
-                // Generate AppDBConfigurations.cs from temp context
-                const tempContextPath = `${tempDir}/Context/${contextName}.cs`
-                const tableConfigs: string[] = []
-                const viewConfigs: string[] = []
-                if (await exists(tempContextPath)) {
-                    const tempContext = readFileContent(tempContextPath)
-                    const entityBlockRegex = /modelBuilder\.Entity<[^>]+>\(entity\s*=>\s*\{[\s\S]*?\}\);/g
-                    const allEntityBlocks = tempContext.match(entityBlockRegex) || []
-                    for (const block of allEntityBlocks) {
-                        const entityMatch = block.match(/modelBuilder\.Entity<([^>]+)>/)
-                        if (!entityMatch) continue
-                        const entityName = entityMatch[1]
-                        if (viewNames.includes(entityName)) {
-                            viewConfigs.push(block)
-                        } else if (selectedTables.includes(entityName)) {
-                            tableConfigs.push(block)
-                        }
-                    }
-                }
+                // Generate AppDBConfigurations.cs from extracted entity blocks
                 const tableEntries = tableConfigs.map(s => `            ${s.trim()}`).join('\r\n\r\n')
                 const viewEntries = viewConfigs.map(s => `            ${s.trim()}`).join('\r\n\r\n')
                 const configurationsContent = `using Microsoft.EntityFrameworkCore;\r\nusing ${projectName}.Domain.Entities;\r\n\r\nnamespace ${projectName}.Infrastructure.Data.Configurations;\r\n\r\npublic static class AppDBConfigurations\r\n{\r\n    public static void Configure(ModelBuilder modelBuilder)\r\n    {\r\n        #region Tables\r\n${tableEntries || '        '}\r\n        #endregion\r\n\r\n        #region Views\r\n${viewEntries || '        '}\r\n        #endregion\r\n\r\n        #region Stored Procedures\r\n        #endregion\r\n    }\r\n}`
@@ -614,14 +611,10 @@ export class GeneratorController {
                 const tempContextPath = `${tempDir}/Context/${contextName}.cs`
                 if (await exists(tempContextPath)) {
                     const tempContext = readFileContent(tempContextPath)
-                    const entityBlockRegex = /modelBuilder\.Entity<[^>]+>\(entity\s*=>\s*\{[\s\S]*?\}\);/g
-                    const allEntityBlocks = tempContext.match(entityBlockRegex) || []
+                    const entityBlocks = extractEntityBlocks(tempContext)
                     const tableConfigs: string[] = []
                     const viewConfigs: string[] = []
-                    for (const block of allEntityBlocks) {
-                        const entityMatch = block.match(/modelBuilder\.Entity<([^>]+)>/)
-                        if (!entityMatch) continue
-                        const entityName = entityMatch[1]
+                    for (const { entityName, block } of entityBlocks) {
                         if (viewNames.includes(entityName)) {
                             viewConfigs.push(block)
                         } else if (tableNames.includes(entityName)) {

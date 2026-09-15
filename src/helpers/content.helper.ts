@@ -256,6 +256,30 @@ function transformProperty(line: string): string {
         return `    public ${typeName}? ${propName} { get; set; }`
     }
 }
+export function extractEntityBlocks(contextContent: string): { entityName: string, block: string }[] {
+    const results: { entityName: string, block: string }[] = []
+    const lines = contextContent.split(/\r?\n/)
+    for (let i = 0; i < lines.length; i++) {
+        const match = lines[i].match(/modelBuilder\.Entity<([^>]+)>/)
+        if (!match) continue
+        const entityName = match[1]
+        let braceDepth = 0
+        let blockStarted = false
+        const blockLines: string[] = []
+        for (let j = i; j < lines.length; j++) {
+            blockLines.push(lines[j])
+            for (const ch of lines[j]) {
+                if (ch === '{') { braceDepth++; blockStarted = true }
+                else if (ch === '}') braceDepth--
+            }
+            if (blockStarted && braceDepth === 0) {
+                results.push({ entityName, block: blockLines.join('\r\n') })
+                break
+            }
+        }
+    }
+    return results
+}
 export function readAllCsFiles(dirPath: string): Map<string, string> {
     const result = new Map<string, string>()
     try {
