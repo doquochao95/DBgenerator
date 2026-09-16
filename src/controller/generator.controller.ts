@@ -24,8 +24,6 @@ export class GeneratorController {
         this._uri = uri
         this._connection = await this.readConnectionString()
         if (!this._connection) return
-        this._genTypes = await this.selectGenType()
-        if (!this._genTypes) return
         mode == Mode.Generate ? await this.callGen() : await this.callRegen()
     }
     //#endregion
@@ -78,12 +76,14 @@ export class GeneratorController {
             { location: ProgressLocation.Notification },
             async (progress) => {
                 progress.report({ message: `Initializing...` });
-                if (this._genTypes.some(x => x.id == GenType.Database || x.id == GenType.Procedure)) {
-                    progress.report({ message: `Selecting architecture type...` });
-                    const archType = await this.selectArchitectureType()
-                    if (!archType) return
-                    this._architectureType = archType
-                }
+                progress.report({ message: `Selecting architecture type...` });
+                const archType = await this.selectArchitectureType()
+                if (!archType) return
+                this._architectureType = archType
+
+                this._genTypes = await this.selectGenType(this._architectureType)
+                if (!this._genTypes) return
+
                 if (this._genTypes.some(x => x.id == GenType.Database || x.id == GenType.Repository)) {
                     let listData: QuickPickModel[] = []
                     progress.report({ message: `Loading tables/views from database...` });
@@ -132,12 +132,14 @@ export class GeneratorController {
             { location: ProgressLocation.Notification },
             async (progress) => {
                 progress.report({ message: `Initializing...` });
-                if (this._genTypes.some(x => x.id == GenType.Database || x.id == GenType.Procedure)) {
-                    progress.report({ message: `Selecting architecture type...` });
-                    const archType = await this.selectArchitectureType()
-                    if (!archType) return
-                    this._architectureType = archType
-                }
+                progress.report({ message: `Selecting architecture type...` });
+                const archType = await this.selectArchitectureType()
+                if (!archType) return
+                this._architectureType = archType
+
+                this._genTypes = await this.selectGenType(this._architectureType)
+                if (!this._genTypes) return
+
                 if (this._genTypes.some(x => x.id == GenType.Database || x.id == GenType.Repository)) {
                     let listData: QuickPickModel[] = []
                     progress.report({ message: `Loading tables/views from database...` });
@@ -751,7 +753,7 @@ export class GeneratorController {
     //#endregion
 
     //#region Selection
-    private async selectGenType() {
+    private async selectGenType(architectureType: ArchitectureType) {
         const obj = Object.keys(GenType)
         const quickPickItems: QuickPickModel[] = [
             <QuickPickModel>{
@@ -767,15 +769,19 @@ export class GeneratorController {
                     label: obj[Object.values(GenType).indexOf(GenType.Procedure)],
                     description: GenType.Procedure,
                 }
-            },
-            <QuickPickModel>{
-                id: GenType.Repository,
-                item: <QuickPickItem>{
-                    label: obj[Object.values(GenType).indexOf(GenType.Repository)],
-                    description: GenType.Repository,
-                }
             }
         ];
+        if (architectureType === ArchitectureType.NTier) {
+            quickPickItems.push(
+                <QuickPickModel>{
+                    id: GenType.Repository,
+                    item: <QuickPickItem>{
+                        label: obj[Object.values(GenType).indexOf(GenType.Repository)],
+                        description: GenType.Repository,
+                    }
+                }
+            )
+        }
         const picked = await pickManyItems(quickPickItems, 'What type of generation do you want ?')
         if (!picked || picked.length == 0)
             showError('Not pick item yet')
