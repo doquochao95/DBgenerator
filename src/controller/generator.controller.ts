@@ -7,7 +7,7 @@ import { ConnectionOption, EFCoreDesign, SDCores } from '../common/constants';
 import { exists, findProjects, readFileContent, runCommand, saveFile, createTempDir, copyDirSync, removeDirSync, writeFileContent } from '../helpers';
 import { getPackages } from '../helpers/xml.helper';
 import { queryStoredProcedures, queryStoredProceduresInfo, queryStoredProceduresParameters, queryStoredProcedureDefinition, queryTables, queryViews } from '../helpers/sql.helper';
-import { getUpdateStoreProcedureDbContextFile, getIRepoFile, getStoredProcedureModelFile, getRepoFile, updateDbContextFile, geUpdateRepoFile, getCleanArchitectureEntityFile, getCleanArchitectureConfigurationsSnippet, transformEntityForCleanArch, transformEntityForNTier, readAllCsFiles, extractEntityBlocks, updateAppDBConfigurations, createAppDBContextFile, createAppDBConfigurations, createDbContextFile } from '../helpers/content.helper';
+import { getUpdateStoreProcedureDbContextFile, createRepoFiles, getStoredProcedureModelFile, updateDbContextFile, updateRepoFiles as getUpdateRepoFile, getCleanArchitectureEntityFile, getCleanArchitectureConfigurationsSnippet, transformEntityForCleanArch, transformEntityForNTier, readAllCsFiles, extractEntityBlocks, updateAppDBConfigurations, createAppDBContextFile, createAppDBConfigurations, createDbContextFile } from '../helpers/content.helper';
 import { FileType, Progress, ProgressLocation, QuickPickItem, QuickPickItemKind, Uri, window, workspace, WorkspaceFolder } from 'vscode';
 
 export class GeneratorController {
@@ -444,7 +444,7 @@ export class GeneratorController {
                 await saveFile(configurationsContent)
             } else {
                 const tempEntitiesDir = `${tempDir}/Entities`
-                copyDirSync(tempEntitiesDir, config.entityFolder)
+                copyDirSync(tempEntitiesDir, config.entityPath)
 
                 const dbContextContent = createDbContextFile(config, tableConfigs, viewConfigs)
                 await saveFile(dbContextContent)
@@ -457,13 +457,8 @@ export class GeneratorController {
     private async createRepo(selectedTables: string[]) {
         if (!await this.checkPackage(SDCores))
             return false
-        const tempDir = createTempDir()
-        try {
-            const repofile = [getIRepoFile(tempDir, selectedTables, this.config), getRepoFile(tempDir, selectedTables, this.config)]
-            repofile.forEach(async file => { await saveFile(file); })
-        } finally {
-            removeDirSync(tempDir)
-        }
+        const repofile = createRepoFiles(this._path, selectedTables, this.config)
+        repofile.forEach(async file => { await saveFile(file); })
         showMessage('Repository files created successfully');
         return true
     }
@@ -479,13 +474,8 @@ export class GeneratorController {
             showError(`File ${irepoName} does not exist, use generate instead`);
             return false
         }
-        const tempDir = createTempDir()
-        try {
-            const repofile = geUpdateRepoFile(tempDir, selectedTables, this.config)
-            repofile.forEach(async file => { await saveFile(file); })
-        } finally {
-            removeDirSync(tempDir)
-        }
+        const repofile = getUpdateRepoFile(this._path, selectedTables, this.config)
+        repofile.forEach(async file => { await saveFile(file); })
         showMessage('Repository files created successfully');
         return true
     }

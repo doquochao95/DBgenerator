@@ -163,95 +163,75 @@ ${viewEntries || '        '}
 }`
     return <FileContent>{ path: config.configurationsPath, filename: filename, content }
 }
-export function geUpdateRepoFile(path: string, tableNames: string[], config: DbGeneratorConfig) {
+export function updateRepoFiles(path: string, tableNames: string[], config: DbGeneratorConfig) {
     const folder: string = config.repoFolder
     const ifilename = `I${config.repoFileName}.cs`;
     const filename = `${config.repoFileName}.cs`;
-    const iregex = /public\sinterface.*?{(.*?)(IRepository<.*?>.*?})\s*(Task<bool>.*?\s*|\s*)}/s
-    const regex = /public\sclass.*private (.*?)\s(.*?);\s*public.*Context;\s*(.*= new Repository.*?)\s*}\s*(public\sIRepository<.*?>.*?)\s*public\sasync.*?;\s*}\s*}/s
-    let icontent: string = readFileContent(`${path}\\${folder}\\${ifilename}`);
-    let content: string = readFileContent(`${path}\\${folder}\\${filename}`);
-
-    const icontentRegex = iregex.exec(icontent)
-    const contentRegex = regex.exec(content)
-    if (icontentRegex == null || contentRegex == null) return null
-    const irepo = tableNames.flatMap(table => {
-        const content = `IRepository<${table}> ${table} { get; }`
-        return icontentRegex[2].indexOf(content) == -1 ? content : []
-    })
-    const repo_value = tableNames.flatMap(table => {
-        const content = `${table} = new Repository<${table}, ${contentRegex[1]}>(${contentRegex[2]});`
-        return contentRegex[3].indexOf(content) == -1 ? content : []
-    })
-    const repo_variable = tableNames.flatMap(table => {
-        const content = `public IRepository<${table}> ${table} { get; set; }`
-        return contentRegex[4].indexOf(content) == -1 ? content : []
-    })
-
-    icontent = icontent.replace(icontentRegex[2], `${icontentRegex[2]}\n        ${irepo.join('\n        ')}`)
-    content = content.replace(contentRegex[3], `${contentRegex[3]}\n            ${repo_value.join('\n            ')}`)
-    content = content.replace(contentRegex[4], `${contentRegex[4]}\n        ${repo_variable.join('\n        ')}`)
-
+    const ifile = `${path}\\${folder}\\${ifilename}`;
+    const file = `${path}\\${folder}\\${filename}`;
+    let icontent: string = readFileContent(ifile);
+    let content: string = readFileContent(file);
+    const iRegex = /(\r?\n\s*\}\s*\})\s*$/
+    const iMatch = iRegex.exec(icontent)
+    if (iMatch) {
+        const insertIRepo = tableNames.map(table => `        IRepository<${table}> ${table} { get; }`).join('\n')
+        icontent = icontent.slice(0, iMatch.index) + '\n' + insertIRepo + iMatch[1]
+    }
+    const ctorRegex = /(\r?\n\s*\})\s*(?=\r?\n\s*public\s+IRepository)/
+    const ctorMatch = ctorRegex.exec(content)
+    if (ctorMatch) {
+        const insertValue = tableNames.map(table => `            ${table} = new Repository<${table}, _DBContext>(_context);`).join('\n')
+        content = content.replace(ctorRegex, '\n' + insertValue + ctorMatch[0])
+    }
+    const propRegex = /(\r?\n\s*\}\s*\})\s*$/
+    const propMatch = propRegex.exec(content)
+    if (propMatch) {
+        const insertVariable = tableNames.map(table => `        public IRepository<${table}> ${table} { get; set; }`).join('\n')
+        content = content.slice(0, propMatch.index) + '\n' + insertVariable + propMatch[1]
+    }
     return [
-        <FileContent>{ path: path, filename: ifilename, content: icontent },
-        <FileContent>{ path: path, filename: filename, content: content }
+        <FileContent>{ path: `${path}\\${folder}`, filename: ifilename, content: icontent },
+        <FileContent>{ path: `${path}\\${folder}`, filename: filename, content: content }
     ]
 }
-export function getIRepoFile(path: string, tableNames: string[], config: DbGeneratorConfig) {
+export function createRepoFiles(path: string, tableNames: string[], config: DbGeneratorConfig) {
     const irepo = tableNames.map(table => `IRepository<${table}> ${table} { get; }`)
+    const repo = tableNames.map(table => `${table} = new Repository<${table}, _${config.dbContextFileName}>(_context);`)
+    const repoVariable = tableNames.map(table => `public IRepository<${table}> ${table} { get; set; }`)
     const root = pathLib.basename(path)
     const folder: string = config.repoFolder
-    const name: string = `I${config.repoFileName}`
-    const filename = `${name}.cs`;
-    const content = `using ${root}.${config.modelFolder};
-using Microsoft.EntityFrameworkCore.Storage;
-using SDCores;
+    const iName: string = `I${config.repoFileName}`
+    const iFilename = `${iName}.cs`;
+    const iContent = `using ${root}.${config.modelFolder};
+
 namespace ${root}.${folder}
 {
-    [DependencyInjection(ServiceLifetime.Scoped)]
-    public interface ${name}
+    public interface ${iName} : ${iName}Base
     {
-        Task<bool> Save();
-        Task<IDbContextTransaction> BeginTransactionAsync();
         ${irepo.join('\n        ')}
     }
 }`;
-    return <FileContent>{ path: path, filename: filename, content: content }
-}
-
-export function getRepoFile(path: string, tableNames: string[], config: DbGeneratorConfig) {
-    const repo = tableNames.map(table => `${table} = new Repository<${table}, ${config.dbContextFileName}>(_dbContext);`)
-    const irepo = tableNames.map(table => `public IRepository<${table}> ${table} { get; set; }`)
-    const root = pathLib.basename(path)
-    const folder: string = config.repoFolder
     const name: string = config.repoFileName
     const filename = `${name}.cs`;
-    const content = `using ${root}.${config.dataFolder};
-using ${root}.${config.modelFolder};
-using Microsoft.EntityFrameworkCore.Storage;
-using SDCores;
+    const content = `using ${root}.${config.modelFolder};
+using Microsoft.EntityFrameworkCore;
+
 namespace ${root}.${folder}
 {
-    public class ${name} : I${name}
+    public class ${name}<_${config.dbContextFileName}> : ${name}Base<_${config.dbContextFileName}>, I${name} where _${config.dbContextFileName} : DbContext
     {
-        private ${config.dbContextFileName} _dbContext;
-        public ${config.repoFileName}(${config.dbContextFileName} dbContext)
+        public ${name}(_${config.dbContextFileName} dbContext)
         {
-            _dbContext = dbContext;
+            _context = dbContext;
             ${repo.join('\n            ')}
         }
-        ${irepo.join('\n        ')}
-        public async Task<bool> Save()
-        {
-            return await _dbContext.SaveChangesAsync() > 0;
-        }
-        public async Task<IDbContextTransaction> BeginTransactionAsync()
-        {
-            return await _dbContext.Database.BeginTransactionAsync();
-        }
+        ${repoVariable.join('\n        ')}
     }
 }`;
-    return <FileContent>{ path: path, filename: filename, content: content }
+    return [
+        <FileContent>{ path: `${path}\\${folder}`, filename: iFilename, content: iContent },
+        <FileContent>{ path: `${path}\\${folder}`, filename: filename, content: content }
+    ]
 }
 export function transformEntityForCleanArch(config: ConfigModel, content: string): string {
     const lines = content.split(/\r?\n/)
